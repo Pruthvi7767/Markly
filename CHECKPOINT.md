@@ -1,26 +1,19 @@
-## Checkpoint — 2026-07-09 — Phase 2: CLI & Tool Sandboxing
+## Checkpoint — 2026-07-09 — Phase 3 MCP Integration
 
-**Branch:** phase-2-tools-sandbox
-**Status:** ready-for-approval
+**Branch:** phase-3-mcp
+**Status:** in-progress
 
 **What was built this session:**
-- Implemented `markly/sandbox.py` using `docker` Python SDK to spin up a persistent `python:3.12-slim` container per run.
-- Refactored `markly/tools/registry.py` into a `ToolRegistry` class supporting Level 0 (index only) and Level 1 (full schema) progressive disclosure.
-- Implemented core system tools (`shell.execute`, `file.read`, `file.write`, `code.run_python`).
-- Implemented web and browser tools (`web.search`, `web.fetch`, and Playwright-based `browser.*`).
-- Implemented the `<tool_observation trust="untrusted">` tagging in `executor.py`.
-- Added dynamic schema injection into tool error messages to facilitate progressive disclosure without requiring a two-step planner call.
-- Patched `checkpoint.py` JSON decoding bug caused by PostgreSQL `JSONB` returning dicts instead of strings in SQLAlchemy.
-- Updated `engine.py` to utilize the new tool registry, sandbox execution, and progressive disclosure system.
+- Merged `phase-2-tools-sandbox` into `develop` after successful E2E test with robust Node.js/Python sandbox.
+- Initialized `phase-3-mcp` branch.
 
 **What is NOT yet done in this phase:**
-- Nothing! Phase 2 implementation is functionally complete.
+- Connect Markly's `ToolRegistry` to external MCP servers (Model Context Protocol).
+- Allow loading external MCP tools (e.g. `github-mcp-server`, `postgres`) dynamically into the sandbox environment or engine.
+- Update `config.toml` to support defining MCP server connections.
 
 **Known issues / open questions:**
-- **NVIDIA NIM Rate Limits:** The free tier for large models (`mistral-large-3-675b` and `llama-3.1-70b`) suffers from heavy rate limiting (429 Too Many Requests) and high latency, which interrupted the real-world test execution.
-- **Docker Sandbox Environment:** `python:3.12-slim` does not have `node` or `npm` pre-installed, so commands like `npx` will fail unless the agent actively installs them first using `apt-get` or `npm`.
+- Need to determine whether MCP calls should be sandboxed or run directly on host (likely host, since MCP servers run via standard stdio on host).
 
 **Next session should start with:**
-- Pruthvi's approval of Phase 2 based on the Test Report.
-- Merging `phase-2-tools-sandbox` into `develop`.
-- Beginning Phase 3 (MCP integration).
+- Create `markly/tools/mcp_client.py` to handle connecting to MCP stdio servers and parsing their tool schemas into Level 1/Level 0 Markly schemas.
