@@ -21,9 +21,24 @@ from markly.checkpoint import save_run, save_turn
 from markly.llm import call_llm
 from markly.state import RunState
 from markly.tools.executor import execute_tool
-from markly.tools.registry import TOOL_INDEX, TOOL_REGISTRY
+from markly.tools.registry import registry
+from markly.tools.core import register_core_tools
+from markly.tools.web import register_web_tools
+from markly.tools.browser import register_browser_tools
+from markly.sandbox import DockerSandbox
 
 logger = logging.getLogger(__name__)
+
+_sandbox_instance = None
+def get_current_sandbox() -> DockerSandbox:
+    global _sandbox_instance
+    if _sandbox_instance is None:
+        _sandbox_instance = DockerSandbox("cli_run")
+    return _sandbox_instance
+
+register_core_tools(registry, get_current_sandbox)
+register_web_tools(registry)
+register_browser_tools(registry)
 
 VERIFY_PASS_THRESHOLD = 70  # score >= this → pass
 
@@ -160,11 +175,11 @@ def subgoal_loop(state: RunState) -> dict:
     # ── PLAN (LLM call) ───────────────────────────────────────────────────────
     plan_system = (
         "You are an AI agent. Select ONE tool to make progress on the current subgoal.\n"
-        f"Available tools:\n{TOOL_INDEX}\n\n"
+        f"Available tools:\n{registry.get_level_0_index()}\n\n"
         "Rules:\n"
         "- Reply ONLY with valid JSON. No markdown. No explanation.\n"
         '- Format: {"tool": "tool_name", "args": {"key": "value"}}\n'
-        "- If no args needed, use: {}."
+        "- If you need to see the exact JSON schema for a tool, guess the arguments first. If incorrect, the error will provide the schema."
     )
 
     plan_raw, p_in, p_out = call_llm(
@@ -191,11 +206,11 @@ def subgoal_loop(state: RunState) -> dict:
         observation = f"ERROR: Planner returned invalid JSON. Raw: {plan_raw[:100]}"
         return _fail_turn(state, observation, tokens_turn, None, {}, prefix)
 
-    if tool_name not in TOOL_REGISTRY:
+    if tool_name not in registry.list_names():
         logger.error("%s VALIDATE: unknown tool '%s'", prefix, tool_name)
         observation = (
             f"ERROR: Tool '{tool_name}' is not registered. "
-            f"Valid tools: {list(TOOL_REGISTRY.keys())}"
+            f"Valid tools: {registry.list_names()}"
         )
         return _fail_turn(state, observation, tokens_turn, tool_name, tool_args, prefix)
 

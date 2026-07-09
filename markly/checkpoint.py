@@ -128,7 +128,7 @@ def load_stale_run() -> dict | None:
             ).fetchone()
 
         if row:
-            state = json.loads(row[0])
+            state = row[0] if isinstance(row[0], dict) else json.loads(row[0])
             logger.warning(
                 "RESUME: Found stale run run_id=%s (goal='%s', turn=%s). Resuming.",
                 state.get("run_id"), state.get("goal", "")[:50], state.get("turn_count"),
