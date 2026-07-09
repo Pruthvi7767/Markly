@@ -19,6 +19,31 @@ class DockerSandbox:
         self.container = None
 
     def start(self) -> None:
+        # Load sandbox config from config.toml
+        whitelisted_domains = []
+        cfg_path = Path(__file__).parent.parent / "config.toml"
+        if cfg_path.exists():
+            try:
+                import tomllib
+                with open(cfg_path, "rb") as f:
+                    cfg = tomllib.load(f)
+                    whitelisted_domains = cfg.get("sandbox", {}).get("whitelisted_domains", [])
+            except Exception as e:
+                logger.error(f"Error loading sandbox config: {e}")
+
+        extra_hosts = {}
+        dns_servers = None
+        if whitelisted_domains:
+            import socket
+            dns_servers = ["127.0.0.1"]  # Block arbitrary resolution
+            for domain in whitelisted_domains:
+                try:
+                    # Resolve to IP to write into /etc/hosts of container
+                    ip = socket.gethostbyname(domain)
+                    extra_hosts[domain] = ip
+                except Exception as e:
+                    logger.warning(f"Could not resolve whitelisted domain '{domain}' on host: {e}")
+
         try:
             self.container = self.client.containers.get(self.container_name)
             if self.container.status != "running":
@@ -37,6 +62,8 @@ class DockerSandbox:
                     }
                 },
                 working_dir="/workspace",
+                extra_hosts=extra_hosts if extra_hosts else None,
+                dns=dns_servers,
                 network_mode="bridge",
                 remove=True
             )

@@ -145,6 +145,38 @@ def subgoal_loop(state: RunState) -> dict:
         _checkpoint(state, update)
         return update
 
+    # Human-kill signal
+    from pathlib import Path
+    import os
+    from markly.db.session import get_engine
+    from sqlalchemy import text
+    db_killed = False
+    if os.environ.get("DATABASE_URL"):
+        try:
+            with get_engine().connect() as conn:
+                row = conn.execute(
+                    text("SELECT status FROM runs WHERE run_id = :run_id"),
+                    {"run_id": state["run_id"]}
+                ).fetchone()
+                if row and row[0] in ("killed", "stopped", "stopping"):
+                    db_killed = True
+        except Exception as e:
+            logger.error("Error checking DB status for kill signal: %s", e)
+    if db_killed or Path(f".kill_{state['run_id']}").exists():
+        reason = "Human-kill signal detected"
+        logger.error("%s %s → escalate", prefix, reason)
+        update = {"status": "waiting_human_review", "escalate_reason": reason, "route": "escalate"}
+        _checkpoint(state, update)
+        return update
+
+    # Stagnation check
+    if state["verify_fail_count"] >= state.get("stagnation_turns", 3):
+        reason = f"Stagnation detected ({state['verify_fail_count']} turns with no progress on subgoal)"
+        logger.error("%s %s → escalate", prefix, reason)
+        update = {"status": "escalated", "escalate_reason": reason, "route": "escalate"}
+        _checkpoint(state, update)
+        return update
+
     if state["subgoal_turn_count"] >= state["max_turns_per_subgoal"]:
         logger.warning("%s Per-subgoal turn cap (%d) hit — skipping subgoal",
                        prefix, state["max_turns_per_subgoal"])

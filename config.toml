@@ -16,3 +16,7 @@ base_url  = "https://integrate.api.nvidia.com/v1"
 [permissions]
 auto_execute_tiers = ["read_only", "write_local"]
 approval_required_tiers = ["destructive"]
+
+[sandbox]
+whitelisted_domains = ["registry.npmjs.org", "github.com", "api.github.com", "pypi.org", "files.pythonhosted.org"]
+

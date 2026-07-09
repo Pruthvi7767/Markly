@@ -72,6 +72,64 @@ def register_browser_tools(registry: ToolRegistry):
         except Exception as e:
             return f"Scroll error: {e}"
 
+    def browser_screenshot(args: Dict[str, Any]) -> str:
+        from pathlib import Path
+        import os
+        path = args.get("path", "screenshot.png")
+        page = _get_page()
+        try:
+            workspace_dir = Path(os.getcwd()) / "workspace"
+            target = (workspace_dir / path).resolve()
+            if not str(target).startswith(str(workspace_dir.resolve())):
+                target = workspace_dir / Path(path).name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(target))
+            return f"Screenshot successfully saved to {path} in workspace."
+        except Exception as e:
+            return f"Screenshot error: {e}"
+
+    def browser_download(args: Dict[str, Any]) -> str:
+        from pathlib import Path
+        import os
+        selector = args.get("selector")
+        path = args.get("path", "downloaded_file")
+        page = _get_page()
+        try:
+            workspace_dir = Path(os.getcwd()) / "workspace"
+            target = (workspace_dir / path).resolve()
+            if not str(target).startswith(str(workspace_dir.resolve())):
+                target = workspace_dir / Path(path).name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            
+            if selector:
+                with page.expect_download() as download_info:
+                    page.click(selector)
+                download = download_info.value
+                download.save_as(str(target))
+                return f"File downloaded and saved to {path}"
+            else:
+                return "Error: missing 'selector' to trigger download."
+        except Exception as e:
+            return f"Download error: {e}"
+
+    def browser_search(args: Dict[str, Any]) -> str:
+        import urllib.parse
+        query = args.get("query")
+        if not query: return "Error: missing 'query'"
+        page = _get_page()
+        try:
+            quoted = urllib.parse.quote(query)
+            page.goto(f"https://html.duckduckgo.com/html/?q={quoted}")
+            links = page.query_selector_all(".result__a")
+            results = []
+            for link in links[:5]:
+                results.append(f"Title: {link.inner_text()}\nURL: {link.get_attribute('href')}\n")
+            if not results:
+                return "No search results found via browser."
+            return "\n".join(results)
+        except Exception as e:
+            return f"Browser search error: {e}"
+
     registry.register(
         name="browser.navigate",
         category="browser",
@@ -115,4 +173,31 @@ def register_browser_tools(registry: ToolRegistry):
         tier="read_only",
         schema={"type": "object", "properties": {"direction": {"type": "string", "enum": ["up", "down"]}}},
         func=browser_scroll
+    )
+
+    registry.register(
+        name="browser.screenshot",
+        category="browser",
+        description="Take a screenshot of the current page and save it.",
+        tier="write_local",
+        schema={"type": "object", "properties": {"path": {"type": "string", "description": "Relative path where to save screenshot inside workspace"}}},
+        func=browser_screenshot
+    )
+
+    registry.register(
+        name="browser.download",
+        category="browser",
+        description="Click an element to trigger a download and save the file.",
+        tier="write_local",
+        schema={"type": "object", "properties": {"selector": {"type": "string", "description": "CSS selector for link/button to click"}, "path": {"type": "string", "description": "Relative path where to save the file inside workspace"}}, "required": ["selector"]},
+        func=browser_download
+    )
+
+    registry.register(
+        name="browser.search",
+        category="browser",
+        description="Search DuckDuckGo via browser and retrieve result list.",
+        tier="read_only",
+        schema={"type": "object", "properties": {"query": {"type": "string", "description": "The search query"}}, "required": ["query"]},
+        func=browser_search
     )

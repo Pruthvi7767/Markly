@@ -48,6 +48,7 @@ class RunState(TypedDict):
     max_turns_per_subgoal: int
     max_consecutive_failures: int
     max_critic_invocations: int
+    stagnation_turns: int
 
     # ── Internal routing signal (read by LangGraph conditional edges) ─────────
     # Values vary per node — see engine.py routing functions
@@ -81,5 +82,6 @@ def initial_state(run_id: str, goal: str, cfg: dict) -> RunState:
         max_turns_per_subgoal=engine_cfg.get("max_turns_per_subgoal", 8),
         max_consecutive_failures=engine_cfg.get("max_consecutive_failures", 3),
         max_critic_invocations=engine_cfg.get("max_critic_invocations", 5),
+        stagnation_turns=engine_cfg.get("stagnation_turns", 3),
         route="",
     )
