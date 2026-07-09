@@ -12,10 +12,9 @@ default_mode = "goal"
 default_access = "auto"
 
 [models]
-planner = "llama-3.3-70b-versatile"
-verifier = "llama-3.3-70b-versatile"
-critic = "llama-3.1-8b-instant"
-base_url = "https://api.groq.com/openai/v1"
+planner = "mistralai/mistral-large-3-675b-instruct-2512"
+verifier = "mistralai/mistral-large-3-675b-instruct-2512"
+critic = "microsoft/phi-4-mini-instruct"
 
 [permissions]
 auto_execute_tiers = [ "read_only", "write_local",]

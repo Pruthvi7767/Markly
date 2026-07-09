@@ -194,7 +194,7 @@ def call_llm(
     full_messages.extend(messages)
     
     # Provider chain
-    providers = ["nvidia", "groq"]
+    providers = ["groq", "nvidia"]
     last_err: Exception | None = None
     
     for provider in providers:

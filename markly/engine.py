@@ -25,6 +25,8 @@ from markly.tools.registry import registry
 from markly.tools.core import register_core_tools
 from markly.tools.web import register_web_tools
 from markly.tools.browser import register_browser_tools
+from markly.tools.memory import register_memory_tools, get_fact_store_content
+from markly.tools.skills import register_skill_tools, get_skills_level_0_index
 from markly.sandbox import DockerSandbox
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,8 @@ def get_current_sandbox() -> DockerSandbox:
 register_core_tools(registry, get_current_sandbox)
 register_web_tools(registry)
 register_browser_tools(registry)
+register_memory_tools(registry)
+register_skill_tools(registry)
 
 VERIFY_PASS_THRESHOLD = 70  # score >= this → pass
 
@@ -214,8 +218,14 @@ def subgoal_loop(state: RunState) -> dict:
 
     # ── PLAN (LLM call) ───────────────────────────────────────────────────────
     restrict_read_only = (state.get("mode") == "read-only")
+    # Ensure system prompt is static across turns for prompt caching
+    system_static_context = (
+        f"{get_fact_store_content()}\n\n"
+        f"{get_skills_level_0_index()}\n\n"
+    )
     plan_system = (
-        "You are an AI agent. Select ONE tool to make progress on the current subgoal.\n"
+        "You are an AI agent. Select ONE tool to make progress on the current subgoal.\n\n"
+        f"{system_static_context}"
         f"Available tools:\n{registry.get_level_0_index(restrict_read_only)}\n\n"
         "Rules:\n"
         "- Reply ONLY with valid JSON. No markdown. No explanation.\n"
