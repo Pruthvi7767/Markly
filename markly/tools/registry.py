@@ -20,12 +20,14 @@ class ToolRegistry:
             "func": func
         }
 
-    def get_level_0_index(self) -> str:
+    def get_level_0_index(self, restrict_read_only: bool = False) -> str:
         """Returns the base index string to always include in context."""
         if not self.tools:
             return "No tools registered."
         lines = []
         for name, meta in sorted(self.tools.items()):
+            if restrict_read_only and meta["tier"] != "read_only":
+                continue
             lines.append(f"- {name} [{meta['category']}]: {meta['description']}")
         return "\n".join(lines)
 

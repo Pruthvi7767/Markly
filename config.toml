@@ -6,6 +6,9 @@ max_consecutive_failures = 3
 max_critic_invocations = 5
 stagnation_turns = 3
 verify_pass_threshold = 70
+default_mode = "goal"
+default_access = "auto"
+
 
 [models]
 planner   = "mistralai/mistral-large-3-675b-instruct-2512"

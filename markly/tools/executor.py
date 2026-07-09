@@ -26,7 +26,18 @@ def _get_permissions() -> tuple[list[str], list[str]]:
     )
 
 
-def execute_tool(name: str, args: Dict[str, Any]) -> str:
+# Global variables for approval callbacks
+_approval_callback = None
+_always_approved_tools = set()
+
+def set_approval_callback(callback) -> None:
+    global _approval_callback
+    _approval_callback = callback
+
+def add_always_approved_tool(name: str) -> None:
+    _always_approved_tools.add(name)
+
+def execute_tool(name: str, args: Dict[str, Any], access_mode: str = "auto") -> str:
     """Execute a registered tool. Returns wrapped observation string.
 
     Raises ValueError for unknown tools.
@@ -39,9 +50,23 @@ def execute_tool(name: str, args: Dict[str, Any]) -> str:
     auto_execute_tiers, approval_required_tiers = _get_permissions()
     tier = tool_meta["tier"]
     
-    if tier in approval_required_tiers:
-        # In Phase 2, we just log that it needs approval, but execute it since we don't have TUI yet.
-        logger.warning(f"Tool {name} requires approval (tier: {tier}). Auto-approving for Phase 2 test.")
+    # Determine if approval is needed
+    requires_approval = False
+    if name not in _always_approved_tools:
+        if access_mode == "ask":
+            requires_approval = True
+        else:
+            # auto mode
+            requires_approval = (tier in approval_required_tiers)
+
+    if requires_approval:
+        if _approval_callback:
+            approved = _approval_callback(name, args, tier)
+            if not approved:
+                return "Error: Execution rejected by user."
+        else:
+            logger.warning(f"Tool {name} requires approval, but no approval handler is registered.")
+            return "Error: Execution rejected (no approval handler registered)."
 
     logger.info("EXECUTE: %s(%s)", name, args)
 

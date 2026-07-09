@@ -33,47 +33,16 @@ def _load_config() -> dict:
 
 
 def main() -> None:
-    # ── Goal ─────────────────────────────────────────────────────────────────
-    if len(sys.argv) > 1:
-        goal = " ".join(sys.argv[1:])
-    else:
-        goal = os.environ.get("MARKLY_GOAL", "").strip()
-
-    if not goal:
-        print("Usage: python -m markly \"Your goal here\"")
-        print("   or: set MARKLY_GOAL=... and run python -m markly")
-        sys.exit(1)
-
     cfg = _load_config()
 
-    # ── Resume check ─────────────────────────────────────────────────────────
-    from markly.checkpoint import load_stale_run
-    state = load_stale_run()
-
-    if state:
-        print(f"\n♻️  Resuming stale run: {state['run_id']}")
-        print(f"   Goal: {state['goal']}")
-        print(f"   Turn: {state['turn_count']} | Subgoal: {state['subgoal_index']}")
+    # If no arguments, start the interactive Textual TUI
+    if len(sys.argv) == 1:
+        from markly.tui import run_tui
+        run_tui(cfg)
     else:
-        from markly.state import initial_state
-        run_id = str(uuid.uuid4())
-        state  = initial_state(run_id, goal, cfg)
-        print(f"\n🚀 Starting new run: {run_id}")
-        print(f"   Goal: {goal}\n")
-
-    # ── Run ───────────────────────────────────────────────────────────────────
-    from markly.engine import GRAPH
-
-    try:
-        final_state = GRAPH.invoke(state)
-        exit_code   = 0 if final_state.get("status") == "completed" else 1
-    except Exception as e:
-        logger.error("FATAL: unhandled exception in graph: %s", e, exc_info=True)
-        print(f"\n💥 FATAL ERROR: {e}")
-        print("   Run was NOT marked complete. Check logs and Postgres for state.")
-        exit_code = 2
-
-    sys.exit(exit_code)
+        # Otherwise, run the Typer CLI app
+        from markly.cli import app
+        app(prog_name="markly")
 
 
 if __name__ == "__main__":

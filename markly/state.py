@@ -50,6 +50,10 @@ class RunState(TypedDict):
     max_critic_invocations: int
     stagnation_turns: int
 
+    # ── Interactive Settings ─────────────────────────────────────────────────
+    mode: str    # "plan" | "goal" | "read-only"
+    access: str  # "auto" | "ask"
+
     # ── Internal routing signal (read by LangGraph conditional edges) ─────────
     # Values vary per node — see engine.py routing functions
     route: str
@@ -83,5 +87,7 @@ def initial_state(run_id: str, goal: str, cfg: dict) -> RunState:
         max_consecutive_failures=engine_cfg.get("max_consecutive_failures", 3),
         max_critic_invocations=engine_cfg.get("max_critic_invocations", 5),
         stagnation_turns=engine_cfg.get("stagnation_turns", 3),
+        mode=engine_cfg.get("default_mode", "goal"),
+        access=engine_cfg.get("default_access", "auto"),
         route="",
     )

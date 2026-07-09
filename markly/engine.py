@@ -119,6 +119,14 @@ def subgoal_loop(state: RunState) -> dict:
     """
     prefix = f"[sub#{state['subgoal_index']} turn#{state['subgoal_turn_count']}]"
 
+    # ── PLAN MODE HALT CHECK ──────────────────────────────────────────────────
+    if state.get("mode") == "plan":
+        reason = "Halted in PLAN mode (checklist built)"
+        logger.info("%s %s", prefix, reason)
+        update = {"status": "waiting_human_review", "escalate_reason": reason, "route": "escalate"}
+        _checkpoint(state, update)
+        return update
+
     # ── STOP CHECK ────────────────────────────────────────────────────────────
     if state["status"] != "running":
         logger.warning("%s Status is '%s' — routing to escalate", prefix, state["status"])
@@ -205,9 +213,10 @@ def subgoal_loop(state: RunState) -> dict:
         logger.warning("%s Prompt guard: ~%d tokens estimated in context", prefix, est)
 
     # ── PLAN (LLM call) ───────────────────────────────────────────────────────
+    restrict_read_only = (state.get("mode") == "read-only")
     plan_system = (
         "You are an AI agent. Select ONE tool to make progress on the current subgoal.\n"
-        f"Available tools:\n{registry.get_level_0_index()}\n\n"
+        f"Available tools:\n{registry.get_level_0_index(restrict_read_only)}\n\n"
         "Rules:\n"
         "- Reply ONLY with valid JSON. No markdown. No explanation.\n"
         '- Format: {"tool": "tool_name", "args": {"key": "value"}}\n'
@@ -246,6 +255,14 @@ def subgoal_loop(state: RunState) -> dict:
         )
         return _fail_turn(state, observation, tokens_turn, tool_name, tool_args, prefix)
 
+    # Read-only mode validation
+    if restrict_read_only:
+        tool_meta = registry.get_tool(tool_name)
+        if tool_meta and tool_meta["tier"] != "read_only":
+            logger.error("%s VALIDATE: tool '%s' not allowed in read-only mode", prefix, tool_name)
+            observation = f"ERROR: Tool '{tool_name}' is not allowed in read-only mode."
+            return _fail_turn(state, observation, tokens_turn, tool_name, tool_args, prefix)
+
     # ── DEDUP ─────────────────────────────────────────────────────────────────
     action_hash = _hash_action(tool_name, tool_args)
     if action_hash in state["action_hash_history"]:
@@ -260,7 +277,7 @@ def subgoal_loop(state: RunState) -> dict:
 
     # ── ACT ───────────────────────────────────────────────────────────────────
     try:
-        raw_obs = execute_tool(tool_name, tool_args)
+        raw_obs = execute_tool(tool_name, tool_args, access_mode=state.get("access", "auto"))
     except Exception as e:
         logger.error("%s ACT error: %s", prefix, e)
         raw_obs = f"ERROR executing {tool_name}: {e}"
