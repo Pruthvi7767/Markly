@@ -34,9 +34,13 @@ MARKLY_LOGO = """
  ╚═════╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝   ╚═╝   
 """
 
+from markly.llm import get_session_cost, get_session_tokens
+
 def get_pricing_cost(tokens: int, model: str) -> float:
-    # Basic estimation: $10.00 per million tokens
-    return (tokens / 1_000_000) * 10.0
+    # Delegate to central LLM cost tracker
+    return get_session_cost()
+
+
 
 def load_planner_model() -> str:
     cfg_path = Path(__file__).parent.parent / "config.toml"
@@ -226,6 +230,19 @@ class MarklyTApp(App):
         self.push_screen(SplashView())
         # Set up a polling timer to process approval requests from background thread
         self.set_interval(0.2, self.check_approval_requests)
+        self.set_interval(1.0, self.poll_cost_and_tokens)
+
+    def poll_cost_and_tokens(self) -> None:
+        """Fetch live tokens and cost from the global tracker."""
+        from markly.llm import get_session_cost, get_session_tokens
+        tokens = get_session_tokens()
+        cost = get_session_cost()
+        try:
+            ticker = self.query_one("#ticker", Static)
+            ticker.update(f"Tokens: {tokens} | Estimated Cost: ${cost:.4f}")
+        except Exception:
+            pass
+
 
     def update_status_bar(self) -> None:
         try:

@@ -1,3 +1,5 @@
+infra_profile = "lightweight"
+
 [engine]
 max_turns = 50
 max_tokens = 200000
@@ -9,17 +11,15 @@ verify_pass_threshold = 70
 default_mode = "goal"
 default_access = "auto"
 
-
 [models]
-planner   = "mistralai/mistral-large-3-675b-instruct-2512"
-verifier  = "mistralai/mistral-large-3-675b-instruct-2512"
-critic    = "microsoft/phi-4-mini-instruct"
-base_url  = "https://integrate.api.nvidia.com/v1"
+planner = "llama-3.3-70b-versatile"
+verifier = "llama-3.3-70b-versatile"
+critic = "llama-3.1-8b-instant"
+base_url = "https://api.groq.com/openai/v1"
 
 [permissions]
-auto_execute_tiers = ["read_only", "write_local"]
-approval_required_tiers = ["destructive"]
+auto_execute_tiers = [ "read_only", "write_local",]
+approval_required_tiers = [ "destructive",]
 
 [sandbox]
-whitelisted_domains = ["registry.npmjs.org", "github.com", "api.github.com", "pypi.org", "files.pythonhosted.org"]
-
+whitelisted_domains = [ "registry.npmjs.org", "github.com", "api.github.com", "pypi.org", "files.pythonhosted.org",]

@@ -703,10 +703,12 @@ dependencies = [
     { name = "openai" },
     { name = "playwright" },
     { name = "psycopg2-binary" },
+    { name = "pyrage" },
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "sqlalchemy" },
     { name = "textual" },
+    { name = "toml" },
     { name = "typer" },
 ]
 
@@ -720,10 +722,12 @@ requires-dist = [
     { name = "openai", specifier = ">=1.30.0" },
     { name = "playwright", specifier = ">=1.61.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.0" },
+    { name = "pyrage", specifier = ">=1.3.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "requests", specifier = ">=2.34.2" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "textual", specifier = ">=8.2.8" },
+    { name = "toml", specifier = ">=0.10.2" },
     { name = "typer", specifier = ">=0.26.8" },
 ]
 
@@ -1223,6 +1227,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pyrage"
+version = "1.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ee/e8/918161376594d69b294e920bd6444f1d9997e6e6dd2aca18e15f1ef72463/pyrage-1.3.0.tar.gz", hash = "sha256:b283a2e3d688cbf68c707f57d93fdab3304ff57c7e2e6b710c0b4bc9096ad9da", size = 30120, upload-time = "2025-06-14T01:28:04.108Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f7/6e/3095678ee12f0401e1de17f4d6993783b20a4b807daf69e23b170724e5f4/pyrage-1.3.0-cp39-abi3-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:907901ada8d63d674cc9005889150846c7349ef587ee8bf5e9278b79c54b4679", size = 1563258, upload-time = "2025-06-14T01:27:57.886Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/e7/f515fbc972a5d83e9fa82d1c23a16f733f4dd6c2c6ae33d9054ca04a8d92/pyrage-1.3.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ea452cb9c9c47083a96b309467dea5614d12530e1de4b6585f10aa04d3d19d1c", size = 785930, upload-time = "2025-06-14T01:27:59.755Z" },
+    { url = "https://files.pythonhosted.org/packages/38/f3/e91bf604fd40c42c60e8f95075cddb0b85d0bdf452f736b533b1bad550e0/pyrage-1.3.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ab066b22925c5a0ec5fead2e21e4586b21d5da730055c7e46caa978bd99de936", size = 847692, upload-time = "2025-06-14T01:28:01.042Z" },
+    { url = "https://files.pythonhosted.org/packages/88/59/15fd1945b02e6f93eff5a2ff352e67f85f51bf543769484f9bd960868c19/pyrage-1.3.0-cp39-abi3-win_amd64.whl", hash = "sha256:3be314a9746809c2710bfd144a6acf0c54a40f43e306857b9778a9d871ad97b3", size = 767566, upload-time = "2025-06-14T01:28:02.597Z" },
+]
+
+[[package]]
 name = "python-dotenv"
 version = "1.2.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1447,6 +1463,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/00/21/39a76b01bd5eea82a04baaca7580e105d8c59450df03998345bb2cfb307b/textual-8.2.8.tar.gz", hash = "sha256:3f106a9fbc73e39dd266c9712432087de78a6d644084c7c241d6a25c3169115b", size = 1860502, upload-time = "2026-06-30T06:51:24.495Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fb/be/35261223d9416a0751cdff1c7b4a6f881387218a12d439fe22fefebc8c04/textual-8.2.8-py3-none-any.whl", hash = "sha256:267375fd402dc8d981457212efa71f0e3365fd17bba144ba9bb3ed7563cb374a", size = 731418, upload-time = "2026-06-30T06:51:26.364Z" },
+]
+
+[[package]]
+name = "toml"
+version = "0.10.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/be/ba/1f744cdc819428fc6b5084ec34d9b30660f6f9daaf70eead706e3203ec3c/toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f", size = 22253, upload-time = "2020-11-01T01:40:22.204Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/44/6f/7120676b6d73228c96e17f1f794d8ab046fc910d781c8d151120c3f1569e/toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b", size = 16588, upload-time = "2020-11-01T01:40:20.672Z" },
 ]
 
 [[package]]

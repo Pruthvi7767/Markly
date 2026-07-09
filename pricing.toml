@@ -1,0 +1,22 @@
+# Pricing configuration for supported models (per 1 million tokens)
+# Prices in USD. Used for cost tracking in Phase 4.
+
+[models."mistralai/mistral-large-3-675b-instruct-2512"]
+input_cost_per_m = 0.0  # Currently free on NIM during some phases, but let's set real-world approx
+output_cost_per_m = 0.0
+
+[models."microsoft/phi-4-mini-instruct"]
+input_cost_per_m = 0.0
+output_cost_per_m = 0.0
+
+[models."llama-3.3-70b-versatile"]
+input_cost_per_m = 0.59
+output_cost_per_m = 0.79
+
+[models."llama-3.1-8b-instant"]
+input_cost_per_m = 0.05
+output_cost_per_m = 0.08
+
+[models."claude-3-5-sonnet-20241022"]
+input_cost_per_m = 3.00
+output_cost_per_m = 15.00

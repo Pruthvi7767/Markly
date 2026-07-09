@@ -7,6 +7,9 @@ from typing import Optional
 import typer
 from sqlalchemy import text
 from markly.db.session import get_engine
+from markly.secrets_manager import is_setup_complete
+from markly.setup_wizard import run_setup_wizard
+
 
 app = typer.Typer(help="Markly CLI — Autonomous AI Developer Platform")
 
@@ -23,6 +26,13 @@ def _load_config() -> dict:
     with open(cfg_path, "rb") as f:
         return tomllib.load(f)
 
+def check_setup():
+    """Ensure setup wizard has been run."""
+    if not is_setup_complete():
+        typer.echo("❌ Setup incomplete. Please run `markly setup` first.")
+        raise typer.Exit(1)
+
+
 @app.command("version")
 def version():
     """Print the version of Markly."""
@@ -31,6 +41,7 @@ def version():
 @app.command("config")
 def config():
     """Show the current parsed config.toml."""
+    check_setup()
     cfg_path = Path(__file__).parent.parent / "config.toml"
     if not cfg_path.exists():
         typer.echo("config.toml not found.")
@@ -40,31 +51,18 @@ def config():
 
 @app.command("setup")
 def setup():
-    """First-run setup wizard (stub for Phase 3)."""
-    typer.echo("--- Markly Setup ---")
-    planner = typer.prompt("Planner Model", default="mistralai/mistral-large-3-675b-instruct-2512")
-    verifier = typer.prompt("Verifier Model", default="mistralai/mistral-large-3-675b-instruct-2512")
-    critic = typer.prompt("Critic Model", default="microsoft/phi-4-mini-instruct")
-    
-    cfg_path = Path(__file__).parent.parent / "config.toml"
-    
-    # Simple write for Phase 3 (Phase 4 will build secure age wizard)
-    import toml
-    cfg = _load_config()
-    if "models" not in cfg:
-        cfg["models"] = {}
-    cfg["models"]["planner"] = planner
-    cfg["models"]["verifier"] = verifier
-    cfg["models"]["critic"] = critic
-    
-    with open(cfg_path, "w", encoding="utf-8") as f:
-        toml.dump(cfg, f)
-        
-    typer.echo(f"Configuration written to {cfg_path} successfully!")
+    """First-run setup wizard."""
+    result = run_setup_wizard()
+    if result:
+        typer.echo("✅ Setup complete!")
+    else:
+        typer.echo("❌ Setup aborted.")
+
 
 @app.command("run")
 def run(goal: str = typer.Argument(..., help="The goal for the AI agent to complete")):
     """Run a goal in one-shot CLI mode."""
+    check_setup()
     cfg = _load_config()
     from markly.state import initial_state
     from markly.engine import GRAPH
@@ -90,6 +88,7 @@ def run(goal: str = typer.Argument(..., help="The goal for the AI agent to compl
 @runs_app.command("list")
 def list_runs():
     """List all historical runs from Postgres."""
+    check_setup()
     if not os.environ.get("DATABASE_URL"):
         typer.echo("DATABASE_URL is not configured.")
         raise typer.Exit(1)
@@ -117,6 +116,7 @@ def list_runs():
 @runs_app.command("show")
 def show_run(run_id: str = typer.Argument(..., help="The Run ID to inspect")):
     """Inspect the turn history and state of a run."""
+    check_setup()
     if not os.environ.get("DATABASE_URL"):
         typer.echo("DATABASE_URL is not configured.")
         raise typer.Exit(1)
@@ -164,6 +164,7 @@ def show_run(run_id: str = typer.Argument(..., help="The Run ID to inspect")):
 @runs_app.command("kill")
 def kill_run(run_id: str = typer.Argument(..., help="The Run ID to kill")):
     """Signal a run to halt immediately by setting status='killed'."""
+    check_setup()
     if not os.environ.get("DATABASE_URL"):
         typer.echo("DATABASE_URL is not configured.")
         raise typer.Exit(1)
@@ -189,6 +190,7 @@ def kill_run(run_id: str = typer.Argument(..., help="The Run ID to kill")):
 @runs_app.command("resume")
 def resume_run(run_id: str = typer.Argument(..., help="The Run ID to resume")):
     """Resume a stopped or escalated run."""
+    check_setup()
     if not os.environ.get("DATABASE_URL"):
         typer.echo("DATABASE_URL is not configured.")
         raise typer.Exit(1)
@@ -238,6 +240,7 @@ def resume_run(run_id: str = typer.Argument(..., help="The Run ID to resume")):
 @app.command("approve")
 def approve_run(run_id: str = typer.Argument(..., help="The Run ID with pending approval")):
     """Manually approve a pending action (CLI counterpart)."""
+    check_setup()
     if not os.environ.get("DATABASE_URL"):
         typer.echo("DATABASE_URL is not configured.")
         raise typer.Exit(1)
