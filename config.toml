@@ -1,0 +1,14 @@
+[engine]
+max_turns = 50
+max_tokens = 200000
+max_turns_per_subgoal = 8
+max_consecutive_failures = 3
+max_critic_invocations = 5
+stagnation_turns = 3
+verify_pass_threshold = 70
+
+[models]
+planner   = "mistralai/mistral-large-3-675b-instruct-2512"
+verifier  = "mistralai/mistral-large-3-675b-instruct-2512"
+critic    = "microsoft/phi-4-mini-instruct"
+base_url  = "https://integrate.api.nvidia.com/v1"
