@@ -2,6 +2,9 @@ import os
 import sys
 import uuid
 import tomllib
+import toml
+import json
+import subprocess
 from pathlib import Path
 from typing import Optional
 import typer
@@ -29,7 +32,7 @@ def _load_config() -> dict:
 def check_setup():
     """Ensure setup wizard has been run."""
     if not is_setup_complete():
-        typer.echo("❌ Setup incomplete. Please run `markly setup` first.")
+        typer.echo("[ERROR] Setup incomplete. Please run `markly setup` first.")
         raise typer.Exit(1)
 
 
@@ -54,9 +57,9 @@ def setup():
     """First-run setup wizard."""
     result = run_setup_wizard()
     if result:
-        typer.echo("✅ Setup complete!")
+        typer.echo("[OK] Setup complete!")
     else:
-        typer.echo("❌ Setup aborted.")
+        typer.echo("[ERROR] Setup aborted.")
 
 
 @app.command("run")
@@ -70,19 +73,19 @@ def run(goal: str = typer.Argument(..., help="The goal for the AI agent to compl
     run_id = str(uuid.uuid4())
     state = initial_state(run_id, goal, cfg)
     
-    typer.echo(f"🚀 Starting new run: {run_id}")
+    typer.echo(f"[START] Starting new run: {run_id}")
     typer.echo(f"Goal: {goal}\n")
     
     try:
         final_state = GRAPH.invoke(state)
         if final_state.get("status") == "completed":
-            typer.echo("✅ Run completed successfully!")
+            typer.echo("[OK] Run completed successfully!")
         else:
-            typer.echo(f"❌ Run halted with status: {final_state.get('status')}")
+            typer.echo(f"[ERROR] Run halted with status: {final_state.get('status')}")
             if final_state.get("escalate_reason"):
                 typer.echo(f"Reason: {final_state.get('escalate_reason')}")
     except Exception as e:
-        typer.echo(f"💥 Fatal error: {e}")
+        typer.echo(f"[FATAL] Fatal error: {e}")
         raise typer.Exit(2)
 
 @runs_app.command("list")
@@ -134,9 +137,31 @@ def show_run(run_id: str = typer.Argument(..., help="The Run ID to inspect")):
                 raise typer.Exit(1)
                 
             goal, status, state_json = run_row
-            typer.echo(f"Run ID: {run_id}")
-            typer.echo(f"Goal:   {goal}")
-            typer.echo(f"Status: {status}")
+            state_dict = state_json if isinstance(state_json, dict) else json.loads(state_json)
+            cost_total = state_dict.get("cost_total", 0.0)
+            tokens_used = state_dict.get("tokens_used", 0)
+            
+            typer.echo(f"Run ID:        {run_id}")
+            typer.echo(f"Goal:          {goal}")
+            typer.echo(f"Status:        {status}")
+            typer.echo(f"Total Tokens:  {tokens_used:,}")
+            typer.echo(f"Total Cost:    ${cost_total:.4f}")
+            typer.echo("Cost Breakdown:")
+            
+            p_in = state_dict.get("tokens_planner_in", 0)
+            p_out = state_dict.get("tokens_planner_out", 0)
+            p_cost = state_dict.get("cost_planner", 0.0)
+            typer.echo(f"  - Planner:   {p_in + p_out:,} tokens (in={p_in:,}, out={p_out:,}) | ${p_cost:.4f}")
+            
+            v_in = state_dict.get("tokens_verifier_in", 0)
+            v_out = state_dict.get("tokens_verifier_out", 0)
+            v_cost = state_dict.get("cost_verifier", 0.0)
+            typer.echo(f"  - Verifier:  {v_in + v_out:,} tokens (in={v_in:,}, out={v_out:,}) | ${v_cost:.4f}")
+            
+            c_in = state_dict.get("tokens_critic_in", 0)
+            c_out = state_dict.get("tokens_critic_out", 0)
+            c_cost = state_dict.get("cost_critic", 0.0)
+            typer.echo(f"  - Critic:    {c_in + c_out:,} tokens (in={c_in:,}, out={c_out:,}) | ${c_cost:.4f}")
             typer.echo("-" * 80)
             
             turns = conn.execute(
@@ -225,14 +250,14 @@ def resume_run(run_id: str = typer.Argument(..., help="The Run ID to resume")):
             )
             conn.commit()
             
-        typer.echo(f"♻️ Resuming run {run_id}...")
+        typer.echo(f"[RESUME] Resuming run {run_id}...")
         
         from markly.engine import GRAPH
         final_state = GRAPH.invoke(state)
         if final_state.get("status") == "completed":
-            typer.echo("✅ Run completed successfully!")
+            typer.echo("[OK] Run completed successfully!")
         else:
-            typer.echo(f"❌ Run status: {final_state.get('status')}")
+            typer.echo(f"[ERROR] Run status: {final_state.get('status')}")
     except Exception as e:
         typer.echo(f"Error resuming: {e}")
         raise typer.Exit(1)
@@ -285,16 +310,16 @@ def eval_suite(
     task_ids = None
     if fast and not tasks:
         task_ids = FAST_TASKS
-        typer.echo(f"⚡ Fast mode: running tasks {task_ids} × 1 rep each")
+        typer.echo(f"[FAST] Fast mode: running tasks {task_ids} × 1 rep each")
     elif tasks:
         task_ids = [t.strip() for t in tasks.split(",")]
-        typer.echo(f"🎯 Running tasks: {task_ids} × {effective_n} reps each")
+        typer.echo(f"[INFO] Running tasks: {task_ids} × {effective_n} reps each")
     else:
-        typer.echo(f"🚀 Running full suite: all tasks × {effective_n} reps each")
+        typer.echo(f"[START] Running full suite: all tasks × {effective_n} reps each")
 
     report_path = Path(report) if report else WORKSPACE_DIR / "eval_report.md"
 
-    typer.echo(f"📊 Report will be written to: {report_path}")
+    typer.echo(f"[REPORT] Report will be written to: {report_path}")
     typer.echo("")
 
     results = run_suite(
@@ -307,7 +332,7 @@ def eval_suite(
     agg = results["aggregate"]
     typer.echo("")
     typer.echo("=" * 60)
-    typer.echo("✅  EVAL SUITE COMPLETE")
+    typer.echo("[OK] EVAL SUITE COMPLETE")
     typer.echo(f"    Tasks run:      {results['n_tasks']} × {results['n_reps']} reps")
     typer.echo(f"    Success rate:   {agg['overall_success_rate']*100:.0f}%")
     typer.echo(f"    Total tokens:   {agg['total_tokens']:,}")
@@ -316,6 +341,87 @@ def eval_suite(
         typer.echo(f"    Caps fired:     {dict((k,v) for k,v in agg['cap_counts'].items() if v > 0)}")
     typer.echo(f"    Report:         {report_path}")
     typer.echo("=" * 60)
+
+
+telemetry_app = typer.Typer(help="Manage anonymous telemetry settings")
+app.add_typer(telemetry_app, name="telemetry")
+
+scheduler_app = typer.Typer(help="Manage the outer cron scheduler daemon")
+app.add_typer(scheduler_app, name="scheduler")
+
+@scheduler_app.command("start")
+def start_scheduler():
+    """Start the outer cron scheduler poller daemon loop."""
+    check_setup()
+    typer.echo("[START] Starting Markly scheduler daemon...")
+    from markly.scheduler import run_scheduler_loop
+    try:
+        run_scheduler_loop()
+    except KeyboardInterrupt:
+        typer.echo("[STOP] Scheduler stopped by operator.")
+    except Exception as e:
+        typer.echo(f"[FATAL] Scheduler crashed: {e}")
+        raise typer.Exit(1)
+
+@telemetry_app.command("status")
+def telemetry_status():
+    """Print whether telemetry collection is currently enabled."""
+    cfg = _load_config()
+    enabled = cfg.get("telemetry", False)
+    status_str = "ENABLED" if enabled else "DISABLED"
+    typer.echo(f"Telemetry is currently {status_str}")
+
+@telemetry_app.command("off")
+def telemetry_off():
+    """Disable anonymous telemetry reporting."""
+    cfg_path = Path(__file__).parent.parent / "config.toml"
+    cfg = {}
+    if cfg_path.exists():
+        with open(cfg_path, "rb") as f:
+            cfg = tomllib.load(f)
+    cfg["telemetry"] = False
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        toml.dump(cfg, f)
+    typer.echo("[OK] Telemetry reporting has been disabled.")
+
+@telemetry_app.command("on")
+def telemetry_on():
+    """Enable anonymous telemetry reporting."""
+    cfg_path = Path(__file__).parent.parent / "config.toml"
+    cfg = {}
+    if cfg_path.exists():
+        with open(cfg_path, "rb") as f:
+            cfg = tomllib.load(f)
+    cfg["telemetry"] = True
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        toml.dump(cfg, f)
+    typer.echo("[OK] Telemetry reporting has been enabled.")
+
+@app.command("update")
+def update_app():
+    """Pull the latest Docker image, apply database migrations, and restart."""
+    typer.echo("[UPDATE] Starting Markly self-update...")
+    try:
+        typer.echo("[PULL] Pulling latest Docker images...")
+        subprocess.run(["docker", "compose", "pull"], check=True)
+        
+        typer.echo("[MIGRATE] Running database migrations...")
+        subprocess.run(["alembic", "upgrade", "head"], check=True)
+        
+        typer.echo("[RESTART] Restarting services...")
+        subprocess.run(["docker", "compose", "up", "-d", "markly-cli"], check=True)
+        typer.echo("[OK] Update succeeded and services restarted!")
+    except subprocess.CalledProcessError as e:
+        typer.echo(f"[ERROR] Subprocess command failed during update: {e}")
+        raise typer.Exit(1)
+    except FileNotFoundError:
+        typer.echo("[WARN] Docker or Docker Compose commands not found. Running database migrations locally...")
+        try:
+            subprocess.run(["alembic", "upgrade", "head"], check=True)
+            typer.echo("[OK] Alembic migrations completed successfully.")
+        except Exception as ex:
+            typer.echo(f"[ERROR] Local migration failed: {ex}")
+            raise typer.Exit(1)
 
 
 if __name__ == "__main__":

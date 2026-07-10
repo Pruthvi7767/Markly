@@ -9,7 +9,7 @@ from pathlib import Path
 from openai import OpenAI
 from textual.app import App, ComposeResult
 from textual.screen import Screen
-from textual.widgets import Header, Footer, Input, Button, Label, RadioSet, RadioButton, Static
+from textual.widgets import Header, Footer, Input, Button, Label, RadioSet, RadioButton, Static, Checkbox
 from textual.containers import Vertical, Horizontal, Container
 
 from markly.secrets_manager import save_secrets
@@ -26,11 +26,12 @@ def _test_openai_connection(base_url: str, api_key: str) -> bool:
 class ConnectionTestScreen(Screen):
     """Shows connection testing progress and results."""
     
-    def __init__(self, nvidia_key: str, groq_key: str, profile: str):
+    def __init__(self, nvidia_key: str, groq_key: str, profile: str, telemetry: bool):
         super().__init__()
         self.nvidia_key = nvidia_key
         self.groq_key = groq_key
         self.profile = profile
+        self.telemetry = telemetry
         self.nvidia_ok = False
         self.groq_ok = False
 
@@ -102,6 +103,7 @@ class ConnectionTestScreen(Screen):
                 cfg = {}
                 
             cfg["infra_profile"] = self.profile
+            cfg["telemetry"] = self.telemetry
             # Provide default models if none exist
             if "models" not in cfg:
                 cfg["models"] = {
@@ -139,6 +141,7 @@ class SetupWizardScreen(Screen):
                 yield RadioButton("Lightweight (Default, fast, local state)", value=True, id="prof-light")
                 yield RadioButton("Heavy (Requires Docker, local Chroma, Postgres)", id="prof-heavy")
                 
+            yield Checkbox("Send anonymous run metrics to help improve Markly?", value=False, id="telemetry-opt", classes="mt-2")
             yield Button("Test Connections & Save", variant="primary", id="btn-next", classes="mt-4")
             
         yield Footer()
@@ -155,7 +158,9 @@ class SetupWizardScreen(Screen):
             radios = self.query_one(RadioSet)
             profile = "lightweight" if radios.pressed_button and radios.pressed_button.id == "prof-light" else "heavy"
             
-            self.app.push_screen(ConnectionTestScreen(nvidia_key, groq_key, profile))
+            telemetry = self.query_one("#telemetry-opt", Checkbox).value
+            
+            self.app.push_screen(ConnectionTestScreen(nvidia_key, groq_key, profile, telemetry))
 
 
 class SetupWizardApp(App):

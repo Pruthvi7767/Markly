@@ -105,10 +105,17 @@ def call_tool_sync(server_name: str, tool_name: str, args: dict) -> str:
     
     _ensure_loop()
     assert _mcp_loop is not None
-    future = asyncio.run_coroutine_threadsafe(_call_tool_async(session, tool_name, args), _mcp_loop)
+
+    from markly.utils.retry import retry_with_backoff
+
+    @retry_with_backoff(max_attempts=3, base_delay=1.0)
+    def _execute_with_retry():
+        future = asyncio.run_coroutine_threadsafe(_call_tool_async(session, tool_name, args), _mcp_loop)
+        return future.result(timeout=60.0)
+    
     try:
-        # Default 60-second timeout to prevent deadlocks
-        result = future.result(timeout=60.0)
+        # Default 60-second timeout with retry wrapper
+        result = _execute_with_retry()
         
         if result.isError:
             error_output = []
@@ -128,7 +135,7 @@ def call_tool_sync(server_name: str, tool_name: str, args: dict) -> str:
                 output.append(f"[{content.type} content omitted]")
         return "\n".join(output)
     except Exception as e:
-        logger.error("MCP tool call failed: %s", e)
+        logger.error("MCP tool call failed after retries: %s", e)
         return f"Error calling {tool_name} on {server_name}: {e}"
 
 def register_mcp_tools(registry) -> None:

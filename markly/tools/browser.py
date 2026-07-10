@@ -1,6 +1,7 @@
 from typing import Dict, Any
 from markly.tools.registry import ToolRegistry
 import logging
+from markly.utils.retry import retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -8,6 +9,18 @@ logger = logging.getLogger(__name__)
 _playwright = None
 _browser = None
 _page = None
+
+@retry_with_backoff(max_attempts=3, base_delay=1.0)
+def _page_goto(page, url):
+    page.goto(url, timeout=10000)
+
+@retry_with_backoff(max_attempts=3, base_delay=1.0)
+def _page_click(page, selector, timeout=5000):
+    page.click(selector, timeout=timeout)
+
+@retry_with_backoff(max_attempts=3, base_delay=1.0)
+def _page_fill(page, selector, value, timeout=5000):
+    page.fill(selector, value, timeout=timeout)
 
 def _get_page():
     global _playwright, _browser, _page
@@ -25,8 +38,11 @@ def register_browser_tools(registry: ToolRegistry):
         url = args.get("url")
         if not url: return "Error: missing 'url'"
         page = _get_page()
-        page.goto(url)
-        return f"Navigated to {page.url}"
+        try:
+            _page_goto(page, url)
+            return f"Navigated to {page.url}"
+        except Exception as e:
+            return f"Navigation error: {e}"
 
     def browser_extract(args: Dict[str, Any]) -> str:
         selector = args.get("selector", "body")
@@ -44,7 +60,7 @@ def register_browser_tools(registry: ToolRegistry):
         if not selector: return "Error: missing 'selector'"
         page = _get_page()
         try:
-            page.click(selector, timeout=5000)
+            _page_click(page, selector)
             return f"Clicked on {selector}"
         except Exception as e:
             return f"Click error: {e}"
@@ -55,7 +71,7 @@ def register_browser_tools(registry: ToolRegistry):
         if not selector or value is None: return "Error: missing 'selector' or 'value'"
         page = _get_page()
         try:
-            page.fill(selector, value, timeout=5000)
+            _page_fill(page, selector, value)
             return f"Filled {selector} with value"
         except Exception as e:
             return f"Fill error: {e}"
@@ -119,7 +135,7 @@ def register_browser_tools(registry: ToolRegistry):
         page = _get_page()
         try:
             quoted = urllib.parse.quote(query)
-            page.goto(f"https://html.duckduckgo.com/html/?q={quoted}")
+            _page_goto(page, f"https://html.duckduckgo.com/html/?q={quoted}")
             links = page.query_selector_all(".result__a")
             results = []
             for link in links[:5]:

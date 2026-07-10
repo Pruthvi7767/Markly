@@ -61,6 +61,14 @@ def execute_tool(name: str, args: Dict[str, Any], access_mode: str = "auto") -> 
     auto_execute_tiers, approval_required_tiers = _get_permissions()
     tier = tool_meta["tier"]
 
+    # Dynamic tier upgrade for http.request based on arguments
+    if name == "http.request":
+        method = str(args.get("method", "GET")).upper()
+        url = str(args.get("url", "")).lower()
+        destructive_patterns = ["delete", "destroy", "wipe", "remove", "purge"]
+        if method == "DELETE" or any(p in url for p in destructive_patterns):
+            tier = "destructive"
+
     # Determine if approval is needed
     requires_approval = False
     if name not in _always_approved_tools:

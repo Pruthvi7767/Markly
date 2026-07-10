@@ -118,7 +118,7 @@ def _attempt_call(
     messages: list[dict], 
     max_tokens: int,
     provider: str
-) -> tuple[str, int, int]:
+) -> tuple[str, int, int, float]:
     """Make the API call with backoff and jitter."""
     last_err: Exception | None = None
     
@@ -141,7 +141,7 @@ def _attempt_call(
             _SESSION_COST_USD += cost
             _SESSION_TOKENS += (tok_in + tok_out)
             
-            return content, tok_in, tok_out
+            return content, tok_in, tok_out, cost
 
 
         except RateLimitError as e:
@@ -173,7 +173,7 @@ def call_llm(
     messages: list[dict],
     system: str = "",
     max_tokens: int = 512,
-) -> tuple[str, int, int]:
+) -> tuple[str, int, int, float]:
     """Call the LLM for the given role with automatic fallback.
 
     Args:

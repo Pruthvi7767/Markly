@@ -4,17 +4,31 @@ from duckduckgo_search import DDGS
 from bs4 import BeautifulSoup
 from markly.tools.registry import ToolRegistry
 
+from markly.utils.retry import retry_with_backoff
+
 def register_web_tools(registry: ToolRegistry):
     
+    @retry_with_backoff(max_attempts=3, base_delay=1.0)
+    def _do_ddg_search(query: str) -> list[str]:
+        results = []
+        with DDGS() as ddgs:
+            for r in ddgs.text(query, max_results=5):
+                results.append(f"Title: {r['title']}\nURL: {r['href']}\nSnippet: {r['body']}\n")
+        return results
+
+    @retry_with_backoff(max_attempts=3, base_delay=1.0)
+    def _do_http_fetch(url: str) -> str:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        return resp.text
+
     def web_search(args: Dict[str, Any]) -> str:
         query = args.get("query")
         if not query:
             return "Error: missing 'query'"
         try:
-            results = []
-            with DDGS() as ddgs:
-                for r in ddgs.text(query, max_results=5):
-                    results.append(f"Title: {r['title']}\nURL: {r['href']}\nSnippet: {r['body']}\n")
+            results = _do_ddg_search(query)
             if not results:
                 return "No results found."
             return "\n".join(results)
@@ -26,11 +40,8 @@ def register_web_tools(registry: ToolRegistry):
         if not url:
             return "Error: missing 'url'"
         try:
-            # Fake user agent to avoid basic blocks
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-            resp = requests.get(url, headers=headers, timeout=10)
-            resp.raise_for_status()
-            soup = BeautifulSoup(resp.text, "html.parser")
+            html_text = _do_http_fetch(url)
+            soup = BeautifulSoup(html_text, "html.parser")
             # Extract readable text
             text = soup.get_text(separator="\n", strip=True)
             # Truncate to avoid context window explosion

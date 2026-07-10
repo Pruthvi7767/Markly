@@ -34,6 +34,12 @@ from markly.tools.skills import register_skill_tools, get_skills_level_0_index
 from markly.sandbox import DockerSandbox
 
 from markly.tools.mcp_client import register_mcp_tools
+from markly.tools.git import register_git_tools
+from markly.tools.doc import register_doc_tools
+from markly.tools.http_tool import register_http_tools
+from markly.tools.notify_tools import register_notify_tools
+from markly.tools.verify import register_verify_tools
+from markly.tools.schedule_tools import register_schedule_tools
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +56,12 @@ register_browser_tools(registry)
 register_memory_tools(registry)
 register_skill_tools(registry)
 register_mcp_tools(registry)
+register_git_tools(registry)
+register_doc_tools(registry)
+register_http_tools(registry)
+register_notify_tools(registry)
+register_verify_tools(registry)
+register_schedule_tools(registry)
 
 
 VERIFY_PASS_THRESHOLD = 70  # score >= this → pass
@@ -130,7 +142,7 @@ def decompose(state: RunState) -> dict:
         'Reply ONLY with valid JSON — no markdown, no explanation:\n'
         '{"subgoals": ["subgoal 1", "subgoal 2", ...]}'
     )
-    content, tok_in, tok_out = call_llm(
+    content, tok_in, tok_out, cost = call_llm(
         role="planner",
         messages=[{"role": "user", "content": f"Goal: {state['goal']}"}],
         system=system,
@@ -154,6 +166,10 @@ def decompose(state: RunState) -> dict:
         "current_subgoal":    subgoals[0],
         "subgoal_index":      0,
         "tokens_used":        state["tokens_used"] + tok_in + tok_out,
+        "tokens_planner_in":   state["tokens_planner_in"] + tok_in,
+        "tokens_planner_out":  state["tokens_planner_out"] + tok_out,
+        "cost_planner":        state["cost_planner"] + cost,
+        "cost_total":          state["cost_total"] + cost,
         "route":              "subgoal_loop",
     }
     _checkpoint(state, update)
@@ -295,13 +311,12 @@ def subgoal_loop(state: RunState) -> dict:
         "- Use the EXACT argument names shown in the tool schema."
     )
 
-    plan_raw, p_in, p_out = call_llm(
+    plan_raw, p_in, p_out, p_cost = call_llm(
         role="planner",
         messages=[{"role": "user", "content": context}],
         system=plan_system,
         max_tokens=200,
     )
-    tokens_turn = p_in + p_out
 
     # ── VALIDATE ──────────────────────────────────────────────────────────────
     tool_name: str | None = None
@@ -317,7 +332,7 @@ def subgoal_loop(state: RunState) -> dict:
     except Exception as e:
         logger.error("%s PLAN parse error: %s | raw: %.100s", prefix, e, plan_raw)
         observation = f"ERROR: Planner returned invalid JSON. Raw: {plan_raw[:100]}"
-        return _fail_turn(state, observation, tokens_turn, None, {}, prefix)
+        return _fail_turn(state, observation, p_in, p_out, p_cost, None, {}, prefix)
 
     if tool_name not in registry.list_names():
         logger.error("%s VALIDATE: unknown tool '%s'", prefix, tool_name)
@@ -325,14 +340,14 @@ def subgoal_loop(state: RunState) -> dict:
             f"ERROR: Tool '{tool_name}' is not registered. "
             f"Valid tools: {registry.list_names()}"
         )
-        return _fail_turn(state, observation, tokens_turn, tool_name, tool_args, prefix)
+        return _fail_turn(state, observation, p_in, p_out, p_cost, tool_name, tool_args, prefix)
 
     if restrict_read_only:
         tool_meta = registry.get_tool(tool_name)
         if tool_meta and tool_meta["tier"] != "read_only":
             logger.error("%s VALIDATE: tool '%s' not allowed in read-only mode", prefix, tool_name)
             observation = f"ERROR: Tool '{tool_name}' is not allowed in read-only mode."
-            return _fail_turn(state, observation, tokens_turn, tool_name, tool_args, prefix)
+            return _fail_turn(state, observation, p_in, p_out, p_cost, tool_name, tool_args, prefix)
 
     # ── DEDUP ─────────────────────────────────────────────────────────────────
     action_hash = _hash_action(tool_name, tool_args)
@@ -342,7 +357,7 @@ def subgoal_loop(state: RunState) -> dict:
             f"ERROR: Duplicate action detected. "
             f"You already tried {tool_name} with args {tool_args}. Use a different approach."
         )
-        return _fail_turn(state, observation, tokens_turn, tool_name, tool_args, prefix)
+        return _fail_turn(state, observation, p_in, p_out, p_cost, tool_name, tool_args, prefix)
 
     logger.info("%s PLAN: %s(%s)", prefix, tool_name, tool_args)
 
@@ -373,13 +388,12 @@ def subgoal_loop(state: RunState) -> dict:
         f"Tool used: {tool_name}\n"
         f"Observation: {raw_obs[:600]}"
     )
-    verify_raw, v_in, v_out = call_llm(
+    verify_raw, v_in, v_out, v_cost = call_llm(
         role="verifier",
         messages=[{"role": "user", "content": verify_user}],
         system=verify_system,
         max_tokens=100,
     )
-    tokens_turn += v_in + v_out
 
     try:
         vs = verify_raw.find("{")
@@ -398,7 +412,14 @@ def subgoal_loop(state: RunState) -> dict:
     base_update = {
         "turn_count":          state["turn_count"] + 1,
         "subgoal_turn_count":  state["subgoal_turn_count"] + 1,
-        "tokens_used":         state["tokens_used"] + tokens_turn,
+        "tokens_used":         state["tokens_used"] + p_in + p_out + v_in + v_out,
+        "tokens_planner_in":   state["tokens_planner_in"] + p_in,
+        "tokens_planner_out":  state["tokens_planner_out"] + p_out,
+        "tokens_verifier_in":  state["tokens_verifier_in"] + v_in,
+        "tokens_verifier_out": state["tokens_verifier_out"] + v_out,
+        "cost_planner":        state["cost_planner"] + p_cost,
+        "cost_verifier":       state["cost_verifier"] + v_cost,
+        "cost_total":          state["cost_total"] + p_cost + v_cost,
         "last_observation":    observation,
         "action_hash_history": new_hash_history,
         "correction_hint":     None,
@@ -466,7 +487,9 @@ def subgoal_loop(state: RunState) -> dict:
 def _fail_turn(
     state: RunState,
     observation: str,
-    tokens_turn: int,
+    p_in: int,
+    p_out: int,
+    p_cost: float,
     tool_name: str | None,
     tool_args: dict,
     prefix: str,
@@ -477,7 +500,11 @@ def _fail_turn(
     base = {
         "turn_count":          state["turn_count"] + 1,
         "subgoal_turn_count":  state["subgoal_turn_count"] + 1,
-        "tokens_used":         state["tokens_used"] + tokens_turn,
+        "tokens_used":         state["tokens_used"] + p_in + p_out,
+        "tokens_planner_in":   state["tokens_planner_in"] + p_in,
+        "tokens_planner_out":  state["tokens_planner_out"] + p_out,
+        "cost_planner":        state["cost_planner"] + p_cost,
+        "cost_total":          state["cost_total"] + p_cost,
         "last_observation":    observation,
         "verify_fail_count":   new_fail_count,
         "correction_hint":     None,
@@ -539,7 +566,7 @@ def critic(state: RunState) -> dict:
         "Diagnose what went wrong."
     )
 
-    content, c_in, c_out = call_llm(
+    content, c_in, c_out, c_cost = call_llm(
         role="critic",
         messages=[{"role": "user", "content": critic_user}],
         system=critic_system,
@@ -575,6 +602,10 @@ def critic(state: RunState) -> dict:
         "critic_attempted": True,
         "critic_count":     state["critic_count"] + 1,
         "tokens_used":      state["tokens_used"] + c_in + c_out,
+        "tokens_critic_in":  state["tokens_critic_in"] + c_in,
+        "tokens_critic_out": state["tokens_critic_out"] + c_out,
+        "cost_critic":       state["cost_critic"] + c_cost,
+        "cost_total":        state["cost_total"] + c_cost,
         "route":            "subgoal_loop",
     }
     _checkpoint(state, update)
@@ -628,6 +659,12 @@ def final_output(state: RunState) -> dict:
     update = {"status": "completed"}
     _checkpoint(state, update)
     
+    try:
+        from markly.telemetry import send_telemetry
+        send_telemetry({**state, **update})
+    except Exception:
+        pass
+    
     # Launch background skill authoring pass
     from markly.memory.skill_author import evaluate_and_author_skill_bg
     evaluate_and_author_skill_bg(state["run_id"], state)
@@ -671,6 +708,12 @@ def escalate(state: RunState) -> dict:
 
     update = {"status": "waiting_human_review"}
     _checkpoint(state, update)
+    
+    try:
+        from markly.telemetry import send_telemetry
+        send_telemetry({**state, **update})
+    except Exception:
+        pass
     
     # Launch background skill authoring pass
     from markly.memory.skill_author import evaluate_and_author_skill_bg

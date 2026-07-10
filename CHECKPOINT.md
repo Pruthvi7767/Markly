@@ -1,24 +1,22 @@
-## Checkpoint — 2026-07-10 — Phase 8 Eval Harness
+## Checkpoint — 2026-07-10 — Phase 10 Packaging, Deployment, and Cost Tracking
 
-**Branch:** phase-8-eval-harness
+**Branch:** phase-10-packaging
 **Status:** ready-for-approval
 
 **What was built this session:**
-- `markly/eval/tasks.py`: 18 curated eval tasks across 4 categories with programmatic success checks.
-- `markly/eval/runner.py`: Eval test runner that executes tasks N times, computes success rate, cost, turns, and cap fire counts.
-- `markly/eval/ui_verifier.py`: Playwright-based headless browser verifier for UI tasks using a local HTTP server.
-- `markly/eval/regression.py`: Persists passing UI assertions to `workspace/<task_id>/regression.json` for continuous regression testing.
-- `markly/cli.py`: Added `markly eval` subcommand with `--fast` mode (N=1) and `--tasks` subset running.
-- `.github/workflows/markly_eval.yml`: Configured CI gate running the fast eval subset on PRs to `develop`.
-- Test fixtures (`broken.py`, `noop.py`, `loop_bug.py`, `divide.py`).
-- Fixed an alias in `markly/tools/core.py` to map Groq's hallucinatory `filename` argument back to `path` in `file.write`.
+- **Cost & Token Tracking**: Integrated role-based token counting and pricing calculation into `markly/state.py`, `markly/llm.py`, `markly/engine.py`, and `markly/cli.py` (`markly runs show` breakdown).
+- **Opt-in Telemetry**: Built `markly/telemetry.py` to send anonymous structural metrics asynchronously when enabled, and created `TELEMETRY.md` transparency document.
+- **Docker Bundling**: Created `Dockerfile` and updated `docker-compose.yml` to bundle `markly-cli`, `postgres`, and `chroma` services with healthchecks and persistent volumes.
+- **Install Scripts**: Created `install.sh` and `install.ps1` for one-command installation and automatic path configuration.
+- **Cleaned Win32 Prints**: Replaced all heavy unicode emojis in `markly/cli.py` with ASCII indicators (`[OK]`, `[ERROR]`, `[START]`) to prevent encoding failures on Windows consoles.
+- **Obsidian Vault Graph**: Compiled 12 hand-written Markdown files inside `graphify-out/obsidian/` detailing the exact architecture, logic, schemas, and API definitions of every module in the project.
 
 **What is NOT yet done in this phase:**
-- Nothing — all requirements met.
+- Nothing — all requirements and verification steps are completed.
 
 **Known issues / open questions:**
-- We added a conservative 60-second execution timeout to MCP tool calls to prevent background deadlocks.
+- None.
 
 **Next session should start with:**
-- Awaiting Pruthvi's approval to merge `phase-7-mcp` into `develop`.
-- Begin Phase 8.
+- Awaiting Pruthvi's approval of the Phase 10 Test Report and the Obsidian Knowledge Graph.
+- Merge `phase-10-packaging` branch into `develop` and tag `v0.1.0-alpha`.

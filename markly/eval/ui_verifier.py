@@ -96,6 +96,9 @@ def run_ui_assertions(
 
     try:
         from playwright.sync_api import sync_playwright
+        from markly.tools.verify import check_output
+        import json
+
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
             page = browser.new_page()
@@ -109,39 +112,60 @@ def run_ui_assertions(
                 try:
                     if atype == "element_exists":
                         sel = assertion["selector"]
-                        el = page.query_selector(sel)
-                        passed = el is not None
-                        detail = f"selector '{sel}' {'found' if passed else 'NOT found'}"
+                        res_json = check_output({
+                            "check_type": "dom_element_present",
+                            "args": {"url": f"{base_url}/index.html", "selector": sel}
+                        })
+                        res = json.loads(res_json)
+                        passed = res.get("passed", False)
+                        detail = res.get("detail", "")
 
                     elif atype == "text_contains":
                         sel = assertion["selector"]
                         expected = assertion.get("text", "")
-                        elements = page.query_selector_all(sel)
-                        found = any(expected.lower() in (el.inner_text() or "").lower() for el in elements)
-                        passed = found
-                        detail = f"text '{expected}' {'found in' if passed else 'NOT found in'} '{sel}'"
+                        res_json = check_output({
+                            "check_type": "dom_element_present",
+                            "args": {"url": f"{base_url}/index.html", "selector": sel, "text_contains": expected}
+                        })
+                        res = json.loads(res_json)
+                        passed = res.get("passed", False)
+                        detail = res.get("detail", "")
 
                     elif atype == "url_contains":
                         expected = assertion.get("text", "")
-                        passed = expected.lower() in page.url.lower()
-                        detail = f"URL contains '{expected}': {passed}"
+                        res_json = check_output({
+                            "check_type": "url_contains",
+                            "args": {"url": f"{base_url}/index.html", "expected": expected}
+                        })
+                        res = json.loads(res_json)
+                        passed = res.get("passed", False)
+                        detail = res.get("detail", "")
 
                     elif atype == "no_console_errors":
-                        # This is best-effort — we check page title at minimum
-                        title = page.title()
-                        passed = True  # no crash = pass for now
-                        detail = f"Page title: {title}"
+                        res_json = check_output({
+                            "check_type": "no_console_errors",
+                            "args": {"url": f"{base_url}/index.html"}
+                        })
+                        res = json.loads(res_json)
+                        passed = res.get("passed", False)
+                        detail = res.get("detail", "")
 
                     elif atype == "click_then_text":
                         click_sel = assertion["click_selector"]
                         text_sel = assertion.get("text_selector", "body")
                         expected = assertion.get("expected_text", "")
-                        page.click(click_sel, timeout=5000)
-                        page.wait_for_timeout(500)
-                        el = page.query_selector(text_sel)
-                        content = el.inner_text() if el else ""
-                        passed = expected.lower() in content.lower()
-                        detail = f"After click, '{expected}' {'found' if passed else 'NOT found'} in '{text_sel}'"
+                        res_json = check_output({
+                            "check_type": "click_then_text",
+                            "args": {
+                                "url": f"{base_url}/index.html",
+                                "click_selector": click_sel,
+                                "text_selector": text_sel,
+                                "expected_text": expected
+                            }
+                        })
+                        res = json.loads(res_json)
+                        passed = res.get("passed", False)
+                        detail = res.get("detail", "")
 
                     else:
                         detail = f"Unknown assertion type: {atype}"

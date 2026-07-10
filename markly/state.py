@@ -25,6 +25,18 @@ class RunState(TypedDict):
     subgoal_turn_count: int         # turns within the current subgoal (resets)
     tokens_used: int                # total tokens consumed this run
 
+    # ── Cost and Token Tracking ──────────────────────────────────────────────
+    tokens_planner_in: int
+    tokens_planner_out: int
+    tokens_verifier_in: int
+    tokens_verifier_out: int
+    tokens_critic_in: int
+    tokens_critic_out: int
+    cost_planner: float
+    cost_verifier: float
+    cost_critic: float
+    cost_total: float
+
     # ── Per-subgoal tracking (all reset when advancing to next subgoal) ──────
     verify_fail_count: int          # verify failures within current subgoal
     critic_attempted: bool          # has critic fired for current subgoal
@@ -73,6 +85,16 @@ def initial_state(run_id: str, goal: str, cfg: dict) -> RunState:
         turn_count=0,
         subgoal_turn_count=0,
         tokens_used=0,
+        tokens_planner_in=0,
+        tokens_planner_out=0,
+        tokens_verifier_in=0,
+        tokens_verifier_out=0,
+        tokens_critic_in=0,
+        tokens_critic_out=0,
+        cost_planner=0.0,
+        cost_verifier=0.0,
+        cost_critic=0.0,
+        cost_total=0.0,
         verify_fail_count=0,
         critic_attempted=False,
         action_hash_history=[],

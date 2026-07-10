@@ -34,11 +34,13 @@ def register_core_tools(registry: ToolRegistry, get_sandbox_fn: Callable[[], Doc
             return "Error: missing 'path' or 'content'"
         sandbox.write_file(path, content)
         
-        # Post-write verification (Requirement 7)
-        # We must stat the file and confirm it exists and has size
-        exit_code, out = sandbox.execute(f"stat {path}")
-        if exit_code != 0:
-            return f"Error: File write failed verification. The file could not be stat-ed after writing. Output: {out}"
+        # Post-write verification using standalone verify.check_output
+        from markly.tools.verify import check_output
+        import json
+        res_json = check_output({"check_type": "file_exists", "args": {"path": path}})
+        res = json.loads(res_json)
+        if not res.get("passed"):
+            return f"Error: File write failed verification. {res.get('detail')}"
             
         return f"File {path} successfully written. Verification passed."
 
