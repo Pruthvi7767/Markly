@@ -140,3 +140,14 @@ def load_stale_run() -> dict | None:
         logger.error("STALE RUN CHECK failed: %s — starting fresh.", e)
 
     return None
+
+
+def get_run_config() -> dict:
+    """Load config.toml and return the dict (used by eval runner to build initial state)."""
+    import tomllib
+    from pathlib import Path as _Path
+    cfg_path = _Path(__file__).parent.parent / "config.toml"
+    if cfg_path.exists():
+        with open(cfg_path, "rb") as f:
+            return tomllib.load(f)
+    return {}

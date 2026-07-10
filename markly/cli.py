@@ -268,5 +268,55 @@ def list_skills():
     """List all registered skills (stub)."""
     typer.echo("Skills: None registered. (Skills will be introduced in Phase 5)")
 
+
+@app.command("eval")
+def eval_suite(
+    tasks: Optional[str] = typer.Option(None, "--tasks", help="Comma-separated task IDs to run (default: all)"),
+    n: int = typer.Option(5, "--n", help="Number of repetitions per task"),
+    fast: bool = typer.Option(False, "--fast", help="Fast mode: N=1, only FAST_TASKS subset"),
+    report: Optional[str] = typer.Option(None, "--report", help="Path to write the markdown report"),
+):
+    """Run the Markly eval harness — test suite across all 4 task categories."""
+    from markly.eval.runner import run_suite, WORKSPACE_DIR
+    from markly.eval.tasks import FAST_TASKS
+
+    effective_n = 1 if fast else n
+
+    task_ids = None
+    if fast and not tasks:
+        task_ids = FAST_TASKS
+        typer.echo(f"⚡ Fast mode: running tasks {task_ids} × 1 rep each")
+    elif tasks:
+        task_ids = [t.strip() for t in tasks.split(",")]
+        typer.echo(f"🎯 Running tasks: {task_ids} × {effective_n} reps each")
+    else:
+        typer.echo(f"🚀 Running full suite: all tasks × {effective_n} reps each")
+
+    report_path = Path(report) if report else WORKSPACE_DIR / "eval_report.md"
+
+    typer.echo(f"📊 Report will be written to: {report_path}")
+    typer.echo("")
+
+    results = run_suite(
+        task_ids=task_ids,
+        n=effective_n,
+        workspace=WORKSPACE_DIR,
+        report_path=report_path,
+    )
+
+    agg = results["aggregate"]
+    typer.echo("")
+    typer.echo("=" * 60)
+    typer.echo("✅  EVAL SUITE COMPLETE")
+    typer.echo(f"    Tasks run:      {results['n_tasks']} × {results['n_reps']} reps")
+    typer.echo(f"    Success rate:   {agg['overall_success_rate']*100:.0f}%")
+    typer.echo(f"    Total tokens:   {agg['total_tokens']:,}")
+    typer.echo(f"    Total cost:     ${agg['total_cost_usd']:.4f}")
+    if any(v > 0 for v in agg["cap_counts"].values()):
+        typer.echo(f"    Caps fired:     {dict((k,v) for k,v in agg['cap_counts'].items() if v > 0)}")
+    typer.echo(f"    Report:         {report_path}")
+    typer.echo("=" * 60)
+
+
 if __name__ == "__main__":
     app()

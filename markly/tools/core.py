@@ -28,7 +28,7 @@ def register_core_tools(registry: ToolRegistry, get_sandbox_fn: Callable[[], Doc
 
     def file_write(args: Dict[str, Any]) -> str:
         sandbox = get_sandbox_fn()
-        path = args.get("path")
+        path = args.get("path") or args.get("filename")
         content = args.get("content")
         if not path or content is None:
             return "Error: missing 'path' or 'content'"
