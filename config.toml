@@ -28,3 +28,9 @@ whitelisted_domains = [ "registry.npmjs.org", "github.com", "api.github.com", "p
 # percentage of MODEL_CONTEXT_LIMIT (8192). Phase 6 default: 80%
 context_limit_tokens = 8192
 trim_threshold_pct = 80
+
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+tools.include = ["list_issues", "create_issue", "search_code"]
+auto_execute = false

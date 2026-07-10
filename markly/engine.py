@@ -33,6 +33,8 @@ from markly.tools.memory import register_memory_tools, get_fact_store_content
 from markly.tools.skills import register_skill_tools, get_skills_level_0_index
 from markly.sandbox import DockerSandbox
 
+from markly.tools.mcp_client import register_mcp_tools
+
 logger = logging.getLogger(__name__)
 
 _sandbox_instance = None
@@ -47,6 +49,8 @@ register_web_tools(registry)
 register_browser_tools(registry)
 register_memory_tools(registry)
 register_skill_tools(registry)
+register_mcp_tools(registry)
+
 
 VERIFY_PASS_THRESHOLD = 70  # score >= this → pass
 

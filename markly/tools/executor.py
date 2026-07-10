@@ -112,4 +112,10 @@ def execute_tool(name: str, args: Dict[str, Any], access_mode: str = "auto") -> 
         record_key(idem_key, _current_run_id, name, args, result)
 
     # Untrusted Tagging (AGENTS.md §6)
-    return f'<tool_observation source="{name}" trust="untrusted">\n{result}\n</tool_observation>'
+    source_tag = name
+    if name.startswith("mcp."):
+        parts = name.split(".")
+        if len(parts) >= 2:
+            source_tag = f"mcp:{parts[1]}"
+            
+    return f'<tool_observation source="{source_tag}" trust="untrusted">\n{result}\n</tool_observation>'
