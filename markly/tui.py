@@ -99,6 +99,70 @@ class MenuScreen(ModalScreen):
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         self.dismiss(self.options[event.option_index])
 
+# --- Escalation Review Screen ---
+class EscalationReviewScreen(ModalScreen):
+    """Modal shown when a run escalates to waiting_human_review.
+
+    Loads the ESCALATION_<run_id>.md file written by notify.escalate_notify()
+    and presents Retry / Kill / Dismiss options using the same OptionList
+    pattern as ApprovalScreen (Phase 3).
+    """
+
+    def __init__(self, run_id: str, reason: str):
+        super().__init__()
+        self.run_id = run_id
+        self.reason = reason
+        self._report = self._load_report()
+
+    def _load_report(self) -> str:
+        from pathlib import Path
+        report_path = Path(__file__).parent.parent / f"ESCALATION_{self.run_id[:8]}.md"
+        if report_path.exists():
+            return report_path.read_text(encoding="utf-8")[:1500]
+        return "(Escalation report file not found — check logs for details.)"
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label("🚨  HUMAN REVIEW REQUIRED", id="esc-title"),
+            Label(f"Run ID: {self.run_id[:8]}", id="esc-run-id"),
+            Label(f"Reason: {self.reason}", id="esc-reason"),
+            Static(self._report, id="esc-report"),
+            Label("\nChoose an action: (Up/Down + Enter)"),
+            OptionList(
+                "Retry  — re-queue the failed subgoal",
+                "Kill   — mark run as permanently killed",
+                "Dismiss — close this screen (run stays paused in DB)",
+                id="esc-options",
+            ),
+            id="esc-container",
+        )
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        # 0 = Retry, 1 = Kill, 2 = Dismiss
+        choice = event.option_index
+        if choice == 1:
+            self._kill_run()
+        self.dismiss(choice)
+
+    def _kill_run(self) -> None:
+        """Mark the run as killed in Postgres."""
+        import os
+        if not os.environ.get("DATABASE_URL"):
+            return
+        try:
+            from markly.db.session import get_engine
+            from sqlalchemy import text
+            with get_engine().connect() as conn:
+                conn.execute(
+                    text("UPDATE runs SET status = 'killed' WHERE run_id = :run_id"),
+                    {"run_id": self.run_id},
+                )
+                conn.commit()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("EscalationReviewScreen: kill failed: %s", e)
+
+
 # --- Main App Screens ---
 class SplashView(Screen):
     """Interactive startup screen."""

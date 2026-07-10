@@ -6,21 +6,25 @@ Loop: decompose → [stop_check → perceive → plan → validate → dedup →
 Per AGENTS.md Section 6 (all enforced here):
 - Planner is the only tool-caller.
 - Verifier is a separate LLM call from the Planner.
-- Critic gets exactly one correction attempt per subgoal.
+- Critic gets exactly ONE correction attempt per subgoal (critic_attempted flag).
 - Caps everywhere: turn, token, per-subgoal, consecutive-failure, critic.
+  Every cap that fires logs a structured CAP_FIRED line.
 - Unhandled failure always defaults to escalate — never silent continuation.
 - External tool output tagged untrusted before re-entering context.
+- Idempotency keys on every side-effecting action (enforced in executor.py).
+- Prompt-size guard trims context before LLM call if > 80% of context limit.
 """
 import hashlib
 import json
 import logging
+import os
 
 from langgraph.graph import END, START, StateGraph
 
 from markly.checkpoint import save_run, save_turn
 from markly.llm import call_llm
 from markly.state import RunState
-from markly.tools.executor import execute_tool
+from markly.tools.executor import execute_tool, set_current_run_id
 from markly.tools.registry import registry
 from markly.tools.core import register_core_tools
 from markly.tools.web import register_web_tools
@@ -46,6 +50,10 @@ register_skill_tools(registry)
 
 VERIFY_PASS_THRESHOLD = 70  # score >= this → pass
 
+# Prompt-size guard constants (conservative — covers Groq Llama-3.1 8k limit)
+MODEL_CONTEXT_LIMIT = 8192
+TOKEN_BUDGET = int(MODEL_CONTEXT_LIMIT * 0.80)  # 6553 tokens
+
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -60,10 +68,41 @@ def _estimate_tokens(text: str) -> int:
     return len(text) // 4
 
 
+def _cap_fired(cap: str, subgoal_idx: int, reason: str, decision: str) -> None:
+    """Structured log emitted every time a cap triggers. Never silent."""
+    logger.error(
+        "CAP_FIRED cap=%s subgoal=%d reason=%s decision=%s",
+        cap, subgoal_idx, reason, decision,
+    )
+
+
 def _checkpoint(current: RunState, update: dict) -> None:
     """Save merged state to Postgres. Logs error but re-raises — never silent."""
     merged = {**current, **update}
     save_run(merged)
+
+
+def _fetch_last_turns(run_id: str, n: int = 3) -> list[dict]:
+    """Fetch the last N turns from Postgres for escalation reporting."""
+    try:
+        from markly.db.session import get_engine
+        from sqlalchemy import text
+        with get_engine().connect() as conn:
+            rows = conn.execute(
+                text("""
+                    SELECT subgoal, tool_name, observation, verify_score
+                    FROM turns WHERE run_id = :run_id
+                    ORDER BY turn_number DESC LIMIT :n
+                """),
+                {"run_id": run_id, "n": n},
+            ).fetchall()
+        return [
+            {"subgoal": r[0], "tool_name": r[1], "observation": r[2], "verify_score": r[3]}
+            for r in reversed(rows)
+        ]
+    except Exception as e:
+        logger.error("_fetch_last_turns failed: %s", e)
+        return []
 
 
 # ─── nodes ───────────────────────────────────────────────────────────────────
@@ -77,6 +116,9 @@ def decompose(state: RunState) -> dict:
         return update
 
     logger.info("DECOMPOSE: goal='%s'", state["goal"][:80])
+
+    # Register run ID with executor so idempotency keys are scoped per run
+    set_current_run_id(state["run_id"])
 
     system = (
         "You are a task planner. Break the given goal into 2-4 concrete, sequential subgoals. "
@@ -118,10 +160,11 @@ def subgoal_loop(state: RunState) -> dict:
     """Execute ONE TURN of the inner loop for the current subgoal.
 
     Turn sequence:
-      stop_check → perceive → memory_lookup (stub) → prompt_guard →
-      plan → validate → dedup → act → observe → verify → route
+      stop_check → perceive → prompt_guard → plan → validate → dedup →
+      act → observe → verify → route
     """
     prefix = f"[sub#{state['subgoal_index']} turn#{state['subgoal_turn_count']}]"
+    sg_idx = state["subgoal_index"]
 
     # ── PLAN MODE HALT CHECK ──────────────────────────────────────────────────
     if state.get("mode") == "plan":
@@ -138,28 +181,27 @@ def subgoal_loop(state: RunState) -> dict:
 
     if state["turn_count"] >= state["max_turns"]:
         reason = f"Global turn cap ({state['max_turns']}) reached"
-        logger.error("%s %s → escalate", prefix, reason)
+        _cap_fired("global_turns", sg_idx, reason, "escalate")
         update = {"status": "escalated", "escalate_reason": reason, "route": "escalate"}
         _checkpoint(state, update)
         return update
 
     if state["tokens_used"] >= state["max_tokens"]:
-        reason = f"Token cap ({state['max_tokens']}) reached"
-        logger.error("%s %s → escalate", prefix, reason)
+        reason = f"Token budget ({state['max_tokens']}) exhausted"
+        _cap_fired("token_budget", sg_idx, reason, "escalate")
         update = {"status": "escalated", "escalate_reason": reason, "route": "escalate"}
         _checkpoint(state, update)
         return update
 
     if state["consecutive_failures"] >= state["max_consecutive_failures"]:
         reason = f"{state['consecutive_failures']} consecutive subgoal failures"
-        logger.error("%s %s → escalate", prefix, reason)
+        _cap_fired("consecutive_failures", sg_idx, reason, "escalate")
         update = {"status": "escalated", "escalate_reason": reason, "route": "escalate"}
         _checkpoint(state, update)
         return update
 
     # Human-kill signal
     from pathlib import Path
-    import os
     from markly.db.session import get_engine
     from sqlalchemy import text
     db_killed = False
@@ -176,22 +218,22 @@ def subgoal_loop(state: RunState) -> dict:
             logger.error("Error checking DB status for kill signal: %s", e)
     if db_killed or Path(f".kill_{state['run_id']}").exists():
         reason = "Human-kill signal detected"
-        logger.error("%s %s → escalate", prefix, reason)
+        _cap_fired("human_kill", sg_idx, reason, "escalate")
         update = {"status": "waiting_human_review", "escalate_reason": reason, "route": "escalate"}
         _checkpoint(state, update)
         return update
 
     # Stagnation check
     if state["verify_fail_count"] >= state.get("stagnation_turns", 3):
-        reason = f"Stagnation detected ({state['verify_fail_count']} turns with no progress on subgoal)"
-        logger.error("%s %s → escalate", prefix, reason)
+        reason = f"Stagnation: {state['verify_fail_count']} turns with no progress on subgoal"
+        _cap_fired("stagnation", sg_idx, reason, "skip")
         update = {"status": "escalated", "escalate_reason": reason, "route": "escalate"}
         _checkpoint(state, update)
         return update
 
     if state["subgoal_turn_count"] >= state["max_turns_per_subgoal"]:
-        logger.warning("%s Per-subgoal turn cap (%d) hit — skipping subgoal",
-                       prefix, state["max_turns_per_subgoal"])
+        reason = f"Per-subgoal turn cap ({state['max_turns_per_subgoal']}) reached"
+        _cap_fired("subgoal_turns", sg_idx, reason, "skip")
         update = {
             "consecutive_failures": state["consecutive_failures"] + 1,
             "verify_fail_count":    state["verify_fail_count"] + 1,
@@ -208,17 +250,33 @@ def subgoal_loop(state: RunState) -> dict:
         f"{obs_block}{hint_block}"
     )
 
-    # ── MEMORY LOOKUP (stub — Phase 5 implements real memory) ─────────────────
-    # no-op
-
-    # ── PROMPT GUARD ──────────────────────────────────────────────────────────
+    # ── PROMPT-SIZE GUARD (real trim, not just a warning) ─────────────────────
     est = _estimate_tokens(context)
-    if est > 6000:
-        logger.warning("%s Prompt guard: ~%d tokens estimated in context", prefix, est)
+    if est > TOKEN_BUDGET:
+        obs_trimmed = (state.get("last_observation") or "")[:500]
+        context = (
+            f"Subgoal ({state['subgoal_index'] + 1}): {state['current_subgoal']}"
+            f"\n\nLast observation (trimmed):\n{obs_trimmed}"
+            f"{hint_block}"
+        )
+        est_after = _estimate_tokens(context)
+        logger.warning(
+            "%s PROMPT_GUARD trim=observation tokens_before=%d tokens_after=%d",
+            prefix, est, est_after,
+        )
+        # Second pass: if still over budget, drop observation entirely
+        if est_after > TOKEN_BUDGET:
+            context = (
+                f"Subgoal ({state['subgoal_index'] + 1}): {state['current_subgoal']}"
+                f"{hint_block}"
+            )
+            logger.warning(
+                "%s PROMPT_GUARD trim=full_observation tokens_after=%d",
+                prefix, _estimate_tokens(context),
+            )
 
     # ── PLAN (LLM call) ───────────────────────────────────────────────────────
     restrict_read_only = (state.get("mode") == "read-only")
-    # Ensure system prompt is static across turns for prompt caching
     system_static_context = (
         f"{get_fact_store_content()}\n\n"
         f"{get_skills_level_0_index()}\n\n"
@@ -230,7 +288,7 @@ def subgoal_loop(state: RunState) -> dict:
         "Rules:\n"
         "- Reply ONLY with valid JSON. No markdown. No explanation.\n"
         '- Format: {"tool": "tool_name", "args": {"key": "value"}}\n'
-        "- If you need to see the exact JSON schema for a tool, guess the arguments first. If incorrect, the error will provide the schema."
+        "- Use the EXACT argument names shown in the tool schema."
     )
 
     plan_raw, p_in, p_out = call_llm(
@@ -265,7 +323,6 @@ def subgoal_loop(state: RunState) -> dict:
         )
         return _fail_turn(state, observation, tokens_turn, tool_name, tool_args, prefix)
 
-    # Read-only mode validation
     if restrict_read_only:
         tool_meta = registry.get_tool(tool_name)
         if tool_meta and tool_meta["tier"] != "read_only":
@@ -362,8 +419,31 @@ def subgoal_loop(state: RunState) -> dict:
     new_fail_count = state["verify_fail_count"] + 1
     logger.warning("%s VERIFY FAIL #%d (score=%d)", prefix, new_fail_count, score)
 
-    if state["critic_attempted"] or new_fail_count >= 2:
-        logger.warning("%s 2nd fail or critic already used → skip subgoal", prefix)
+    # Critic already used for this subgoal → hard-stop, skip subgoal
+    if state["critic_attempted"]:
+        _cap_fired(
+            "critic_retry",
+            sg_idx,
+            f"critic already attempted this subgoal (score={score})",
+            "skip",
+        )
+        update = {
+            **base_update,
+            "verify_fail_count":    new_fail_count,
+            "consecutive_failures": state["consecutive_failures"] + 1,
+            "route":                "next_subgoal",
+        }
+        _checkpoint(state, update)
+        return update
+
+    # Second verify-fail without critic → skip
+    if new_fail_count >= 2:
+        _cap_fired(
+            "verify_fails",
+            sg_idx,
+            f"2+ verify fails without critic (score={score})",
+            "skip",
+        )
         update = {
             **base_update,
             "verify_fail_count":    new_fail_count,
@@ -388,6 +468,7 @@ def _fail_turn(
     prefix: str,
 ) -> dict:
     """Immediate verify-fail helper for validation/dedup errors."""
+    sg_idx = state["subgoal_index"]
     new_fail_count = state["verify_fail_count"] + 1
     base = {
         "turn_count":          state["turn_count"] + 1,
@@ -404,7 +485,11 @@ def _fail_turn(
         observation=observation,
         verify_score=0,
     )
-    if state["critic_attempted"] or new_fail_count >= 2:
+    if state["critic_attempted"]:
+        _cap_fired("critic_retry", sg_idx, "critic already attempted this subgoal", "skip")
+        update = {**base, "consecutive_failures": state["consecutive_failures"] + 1, "route": "next_subgoal"}
+    elif new_fail_count >= 2:
+        _cap_fired("verify_fails", sg_idx, f"{new_fail_count} verify fails (validation error)", "skip")
         update = {**base, "consecutive_failures": state["consecutive_failures"] + 1, "route": "next_subgoal"}
     else:
         update = {**base, "route": "critic"}
@@ -413,13 +498,19 @@ def _fail_turn(
 
 
 def critic(state: RunState) -> dict:
-    """Diagnose why the subgoal failed; inject a correction hint."""
+    """Diagnose why the subgoal failed; inject a correction hint.
+
+    Hard cap: max_critic_invocations per run (AGENTS.md §6).
+    """
     logger.info("CRITIC: diagnosing failure for subgoal: %s", state["current_subgoal"][:60])
 
-    # Hard cap on critic invocations per run
     if state["critic_count"] >= state["max_critic_invocations"]:
-        logger.error("CRITIC: invocation cap (%d) reached — skipping subgoal",
-                     state["max_critic_invocations"])
+        _cap_fired(
+            "critic_run_cap",
+            state["subgoal_index"],
+            f"critic invocation cap ({state['max_critic_invocations']}) reached for this run",
+            "skip",
+        )
         update = {
             "critic_attempted":     True,
             "consecutive_failures": state["consecutive_failures"] + 1,
@@ -458,7 +549,6 @@ def critic(state: RunState) -> dict:
         category = cp.get("category", "goal_misunderstood")
         reason   = cp.get("reason", "unknown")
 
-        # Cross-check: empty/error observation shouldn't get non-environment categories
         obs = state.get("last_observation", "")
         if ("ERROR" in obs or not obs.strip()) and category not in (
             "environment_error", "missing_precondition"
@@ -537,23 +627,45 @@ def final_output(state: RunState) -> dict:
 
 
 def escalate(state: RunState) -> dict:
-    """Terminal: escalate to human review."""
+    """Terminal: escalate to human review.
+
+    Phase 6 additions:
+    - Fetches last 3 turns from DB for the escalation report.
+    - Calls notify.escalate_notify() → desktop toast + ESCALATION_*.md.
+    - Run is permanently halted (routes to END) — no auto-resume.
+    """
     reason = state.get("escalate_reason") or "Budget or failure cap exceeded"
     logger.error("ESCALATE: %s", reason)
+
+    last_turns = _fetch_last_turns(state["run_id"], n=3)
+    critic_diagnosis = state.get("correction_hint")
+
     print("\n" + "=" * 60)
     print("🚨  MARKLY ESCALATED — HUMAN REVIEW REQUIRED")
     print(f"    Reason:    {reason}")
     print(f"    Run ID:    {state['run_id']}")
     print(f"    Status:    waiting_human_review")
-    print(f"    Turns so far:  {state['turn_count']}")
-    print(f"    Last obs:  {str(state.get('last_observation', ''))[:120]}")
+    print(f"    Turns:     {state['turn_count']}")
+    if last_turns:
+        last = last_turns[-1]
+        print(f"    Last obs:  {str(last.get('observation', ''))[:120]}")
     print("=" * 60)
+
+    # Real notification — toast + file
+    from markly.notify import escalate_notify
+    escalate_notify(
+        run_id=state["run_id"],
+        reason=reason,
+        last_turns=last_turns,
+        critic_diagnosis=critic_diagnosis,
+    )
+
     update = {"status": "waiting_human_review"}
     _checkpoint(state, update)
     return update
 
 
-# ─── routing functions (read state['route'], set by each node) ────────────────
+# ─── routing functions ────────────────────────────────────────────────────────
 
 def _route(state: RunState) -> str:
     return state.get("route", "escalate")
