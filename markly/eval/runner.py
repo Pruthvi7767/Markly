@@ -58,11 +58,14 @@ _PRICING = _load_pricing()
 def _tokens_to_cost(tokens_used: int, role: str = "planner") -> float:
     """Estimate cost in USD. Falls back to $0 if pricing not configured."""
     for model_key, model_data in _PRICING.items():
-        # Rough: use planner model pricing
-        if "planner" in model_key.lower() or role in model_key.lower():
-            per_1k = model_data.get("cost_per_1k_tokens", 0.0)
-            return (tokens_used / 1000) * per_1k
-    # Groq: effectively free at current usage levels
+        # Fallback heuristic if we don't have exact token splits: 
+        # assume tokens are roughly 75% input, 25% output
+        if "planner" in model_key.lower() or role in model_key.lower() or "llama" in model_key.lower():
+            in_cost_m = model_data.get("input_cost_per_m", 0.0)
+            out_cost_m = model_data.get("output_cost_per_m", 0.0)
+            est_in = tokens_used * 0.75
+            est_out = tokens_used * 0.25
+            return (est_in / 1_000_000) * in_cost_m + (est_out / 1_000_000) * out_cost_m
     return 0.0
 
 
