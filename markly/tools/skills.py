@@ -26,12 +26,14 @@ def _parse_skill(skill_path: Path) -> dict:
                         v = False
                     metadata[k] = v
                     
-    return {
+    result = dict(metadata)
+    result.update({
         "name": metadata.get("name", skill_path.parent.name),
         "description": metadata.get("description", "No description provided."),
         "immutable": metadata.get("immutable", False),
         "body": body
-    }
+    })
+    return result
 
 def get_skills_level_0_index() -> str:
     """Returns a summary index of all available skills for the system prompt."""
@@ -44,7 +46,14 @@ def get_skills_level_0_index() -> str:
             skill_md = skill_folder / "SKILL.md"
             if skill_md.exists():
                 skill_data = _parse_skill(skill_md)
-                skills.append(f"- {skill_data['name']}: {skill_data['description']}")
+                
+                # Exclude degrading skills from standard index to protect loop
+                status = skill_data.get("status", "unproven")
+                if status == "degrading":
+                    continue
+                    
+                trust_str = "[VALIDATED]" if status == "validated" else "[UNPROVEN - use cautiously]"
+                skills.append(f"- {skill_data['name']} {trust_str}: {skill_data['description']}")
                 
     if not skills:
         return "No skills currently available."
@@ -62,7 +71,25 @@ def skill_view(args: dict) -> str:
     if not skill_path.exists():
         return f"ERROR: Skill '{name}' not found at {skill_path}."
         
-    return skill_path.read_text(encoding="utf-8")
+    content = skill_path.read_text(encoding="utf-8")
+    
+    # Increment times_invoked if we can cleanly parse it
+    try:
+        import re
+        if re.search(r"^times_invoked:\s*(\d+)", content, re.MULTILINE):
+            new_content = re.sub(
+                r"^(times_invoked:\s*)(\d+)", 
+                lambda m: f"{m.group(1)}{int(m.group(2)) + 1}", 
+                content, 
+                count=1, 
+                flags=re.MULTILINE
+            )
+            skill_path.write_text(new_content, encoding="utf-8")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Could not increment times_invoked: %s", e)
+        
+    return content
 
 
 def register_skill_tools(registry):

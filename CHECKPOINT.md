@@ -1,23 +1,20 @@
-## Checkpoint — 2026-07-10 — Phase 7 MCP
+## Checkpoint — 2026-07-10 — Phase 8 Eval Harness
 
-**Branch:** phase-7-mcp
+**Branch:** phase-8-eval-harness
 **Status:** ready-for-approval
 
 **What was built this session:**
-- Added `mcp` dependency to `pyproject.toml` and installed via `uv`.
-- Added `mcp_servers` configuration block for GitHub in `config.toml`, with `auto_execute = false` and specific `tools.include`.
-- Implemented `markly/tools/mcp_client.py`:
-  - Runs a dedicated `asyncio` event loop in a daemon thread.
-  - Connects to MCP servers over stdio and initializes the `ClientSession`.
-  - Bridges the sync/async gap using `asyncio.run_coroutine_threadsafe`.
-  - Applies `tools.include`/`exclude` filtering *before* registering tools.
-  - Registers tools dynamically as `mcp.<server>.<tool>`.
-  - Applies progressive disclosure tiering: `write_local` if `auto_execute` is true, otherwise defaults safely to `destructive` (requires approval).
-- Updated `markly/engine.py` to call `register_mcp_tools(registry)` during boot.
-- Updated `markly/tools/executor.py` to format MCP tool results with `<tool_observation source="mcp:<server>" trust="untrusted">`.
+- `markly/eval/tasks.py`: 18 curated eval tasks across 4 categories with programmatic success checks.
+- `markly/eval/runner.py`: Eval test runner that executes tasks N times, computes success rate, cost, turns, and cap fire counts.
+- `markly/eval/ui_verifier.py`: Playwright-based headless browser verifier for UI tasks using a local HTTP server.
+- `markly/eval/regression.py`: Persists passing UI assertions to `workspace/<task_id>/regression.json` for continuous regression testing.
+- `markly/cli.py`: Added `markly eval` subcommand with `--fast` mode (N=1) and `--tasks` subset running.
+- `.github/workflows/markly_eval.yml`: Configured CI gate running the fast eval subset on PRs to `develop`.
+- Test fixtures (`broken.py`, `noop.py`, `loop_bug.py`, `divide.py`).
+- Fixed an alias in `markly/tools/core.py` to map Groq's hallucinatory `filename` argument back to `path` in `file.write`.
 
 **What is NOT yet done in this phase:**
-- Nothing. All requirements implemented.
+- Nothing — all requirements met.
 
 **Known issues / open questions:**
 - We added a conservative 60-second execution timeout to MCP tool calls to prevent background deadlocks.

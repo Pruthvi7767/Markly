@@ -627,6 +627,11 @@ def final_output(state: RunState) -> dict:
     print("=" * 60)
     update = {"status": "completed"}
     _checkpoint(state, update)
+    
+    # Launch background skill authoring pass
+    from markly.memory.skill_author import evaluate_and_author_skill_bg
+    evaluate_and_author_skill_bg(state["run_id"], state)
+    
     return update
 
 
@@ -666,6 +671,11 @@ def escalate(state: RunState) -> dict:
 
     update = {"status": "waiting_human_review"}
     _checkpoint(state, update)
+    
+    # Launch background skill authoring pass
+    from markly.memory.skill_author import evaluate_and_author_skill_bg
+    evaluate_and_author_skill_bg(state["run_id"], state)
+    
     return update
 
 
