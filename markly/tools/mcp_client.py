@@ -111,7 +111,13 @@ def call_tool_sync(server_name: str, tool_name: str, args: dict) -> str:
         result = future.result(timeout=60.0)
         
         if result.isError:
-            return f"Error from tool: {result.content}"
+            error_output = []
+            for content in result.content:
+                if content.type == "text":
+                    error_output.append(content.text)
+                else:
+                    error_output.append(f"[{content.type} content omitted]")
+            return f"Error from tool:\n" + "\n".join(error_output)
         
         # Format the ToolResultContent
         output = []

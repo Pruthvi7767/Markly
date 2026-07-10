@@ -34,3 +34,9 @@ command = "npx"
 args = ["-y", "@modelcontextprotocol/server-github"]
 tools.include = ["list_issues", "create_issue", "search_code"]
 auto_execute = false
+
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+tools.include = ["resolve-library-id", "query-docs"]
+auto_execute = true
