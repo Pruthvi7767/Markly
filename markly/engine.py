@@ -24,7 +24,7 @@ from langgraph.graph import END, START, StateGraph
 from markly.checkpoint import save_run, save_turn
 from markly.llm import call_llm
 from markly.state import RunState
-from markly.tools.executor import execute_tool, set_current_run_id
+from markly.tools.executor import execute_tool, set_current_context
 from markly.tools.registry import registry
 from markly.tools.core import register_core_tools
 from markly.tools.web import register_web_tools
@@ -64,7 +64,7 @@ register_verify_tools(registry)
 register_schedule_tools(registry)
 
 
-VERIFY_PASS_THRESHOLD = 70  # score >= this → pass
+VERIFY_PASS_THRESHOLD = 70  # score >= this -> pass
 
 # Prompt-size guard constants (conservative — covers Groq Llama-3.1 8k limit)
 MODEL_CONTEXT_LIMIT = 8192
@@ -133,8 +133,8 @@ def decompose(state: RunState) -> dict:
 
     logger.info("DECOMPOSE: goal='%s'", state["goal"][:80])
 
-    # Register run ID with executor so idempotency keys are scoped per run
-    set_current_run_id(state["run_id"])
+    # Register run ID and turn with executor so idempotency keys are scoped per run/turn
+    set_current_context(state["run_id"], state["turn_count"])
 
     system = (
         "You are a task planner. Break the given goal into 2-4 concrete, sequential subgoals. "
@@ -363,6 +363,7 @@ def subgoal_loop(state: RunState) -> dict:
 
     # ── ACT ───────────────────────────────────────────────────────────────────
     try:
+        set_current_context(state["run_id"], state["turn_count"])
         raw_obs = execute_tool(tool_name, tool_args, access_mode=state.get("access", "auto"))
     except Exception as e:
         logger.error("%s ACT error: %s", prefix, e)
@@ -614,6 +615,13 @@ def critic(state: RunState) -> dict:
 
 def next_subgoal(state: RunState) -> dict:
     """Advance to the next subgoal or signal completion."""
+    if state.get("consecutive_failures", 0) >= state.get("max_consecutive_failures", 3):
+        reason = f"{state.get('consecutive_failures')} consecutive subgoal failures"
+        logger.warning("NEXT_SUBGOAL: %s", reason)
+        update = {"status": "escalated", "escalate_reason": reason, "route": "escalate"}
+        _checkpoint(state, update)
+        return update
+
     remaining = state["remaining_subgoals"]
 
     if not remaining:
@@ -654,6 +662,9 @@ def final_output(state: RunState) -> dict:
     print(f"    Subgoals completed: {state['subgoal_index'] + 1}")
     print(f"    Total turns:        {state['turn_count']}")
     print(f"    Total tokens used:  {state['tokens_used']}")
+    print(f"      Planner tokens:   {state.get('tokens_planner_in', 0) + state.get('tokens_planner_out', 0)}")
+    print(f"      Verifier tokens:  {state.get('tokens_verifier_in', 0) + state.get('tokens_verifier_out', 0)}")
+    print(f"      Critic tokens:    {state.get('tokens_critic_in', 0) + state.get('tokens_critic_out', 0)}")
     print(f"    Run ID:             {state['run_id']}")
     print("=" * 60)
     update = {"status": "completed"}
@@ -757,6 +768,7 @@ def build_graph():
     g.add_conditional_edges("next_subgoal", _route, {
         "subgoal_loop": "subgoal_loop",
         "final_output": "final_output",
+        "escalate":     "escalate",
     })
 
     g.add_edge("final_output", END)

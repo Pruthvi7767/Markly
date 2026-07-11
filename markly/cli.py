@@ -261,6 +261,9 @@ def resume_run(run_id: str = typer.Argument(..., help="The Run ID to resume")):
         typer.echo(f"[RESUME] Resuming run {run_id}...")
         
         from markly.engine import GRAPH
+        from markly.tools.executor import set_approval_handler
+        set_approval_handler(cli_approval_handler)
+        
         final_state = GRAPH.invoke(state)
         if final_state.get("status") == "completed":
             typer.echo("[OK] Run completed successfully!")
