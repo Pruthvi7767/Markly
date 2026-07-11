@@ -69,6 +69,14 @@ def run(goal: str = typer.Argument(..., help="The goal for the AI agent to compl
     cfg = _load_config()
     from markly.state import initial_state
     from markly.engine import GRAPH
+    from markly.tools.executor import set_approval_callback
+    
+    def cli_approval_handler(tool_name: str, tool_args: dict, tier: str) -> bool:
+        typer.echo(f"\n[APPROVAL REQUIRED] Tool '{tool_name}' requires approval (Tier: {tier}).")
+        typer.echo(f"Arguments: {json.dumps(tool_args, indent=2)}")
+        return typer.confirm("Do you approve this execution?", default=False)
+        
+    set_approval_callback(cli_approval_handler)
     
     run_id = str(uuid.uuid4())
     state = initial_state(run_id, goal, cfg)

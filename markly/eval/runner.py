@@ -356,10 +356,10 @@ def _render_markdown_report(s: dict) -> str:
         lines += [f"", f"## UI Verification Results"]
         for r in ui_tasks:
             ui = r["ui_verification"]
-            passed_str = "✅ PASS" if ui.get("ui_passed") else "❌ FAIL"
+            passed_str = "[OK] PASS" if ui.get("ui_passed") else "[FAIL] FAIL"
             lines.append(f"", f"### {r['task_id']} — {passed_str}")
             for ur in ui.get("ui_results", []):
-                icon = "✅" if ur["passed"] else "❌"
+                icon = "[OK]" if ur["passed"] else "[FAIL]"
                 lines.append(f"- {icon} `{ur['assertion']['type']}` — {ur['detail']}")
             if ui.get("ui_screenshot"):
                 lines.append(f"- 📸 Screenshot: `{ui['ui_screenshot']}`")

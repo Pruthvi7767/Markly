@@ -49,7 +49,7 @@ def notify_human(args: Dict[str, Any]) -> str:
             
     # 2. Fallback to desktop toast and print
     _toast(title="Markly Alert", message=message)
-    print(f"\n📢 MARKLY ALERT: {message}\n", flush=True)
+    print(f"\n[ALERT] MARKLY ALERT: {message}\n", flush=True)
     return "Notification delivered to human via fallback (desktop/console)."
 
 def register_notify_tools(registry: ToolRegistry):

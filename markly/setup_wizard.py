@@ -60,9 +60,9 @@ class ConnectionTestScreen(Screen):
             ok = _test_openai_connection("https://integrate.api.nvidia.com/v1", self.nvidia_key)
             self.nvidia_ok = ok
             if ok:
-                nvidia_status.update("NVIDIA NIM: ✅ Connected")
+                nvidia_status.update("NVIDIA NIM: [OK] Connected")
             else:
-                nvidia_status.update("NVIDIA NIM: ❌ Failed (check key)")
+                nvidia_status.update("NVIDIA NIM: [FAIL] Failed (check key)")
         else:
             self.nvidia_ok = False
             nvidia_status.update("NVIDIA NIM: No key provided")
@@ -72,9 +72,9 @@ class ConnectionTestScreen(Screen):
             ok = _test_openai_connection("https://api.groq.com/openai/v1", self.groq_key)
             self.groq_ok = ok
             if ok:
-                groq_status.update("Groq: ✅ Connected")
+                groq_status.update("Groq: [OK] Connected")
             else:
-                groq_status.update("Groq: ❌ Failed (check key)")
+                groq_status.update("Groq: [FAIL] Failed (check key)")
         else:
             self.groq_ok = True  # Optional, so OK if missing
             groq_status.update("Groq: Not configured")

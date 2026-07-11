@@ -78,7 +78,7 @@ def _author_skill_pass(run_id: str, state: Dict[str, Any]):
 
         user_prompt = f"Run Goal: {state.get('goal')}\nTranscript:\n{transcript_str}\n\nDid anything here deserve becoming a reusable skill? If yes, author it."
 
-        content, _, _ = call_llm(
+        content, _, _, _ = call_llm(
             role="skill_author",
             messages=[{"role": "user", "content": user_prompt}],
             system=system_prompt,

@@ -649,7 +649,7 @@ def final_output(state: RunState) -> dict:
         state["subgoal_index"] + 1, state["turn_count"], state["tokens_used"],
     )
     print("\n" + "=" * 60)
-    print("✅  MARKLY RUN COMPLETE")
+    print("[OK]  MARKLY RUN COMPLETE")
     print(f"    Goal:               {state['goal']}")
     print(f"    Subgoals completed: {state['subgoal_index'] + 1}")
     print(f"    Total turns:        {state['turn_count']}")

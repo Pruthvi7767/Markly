@@ -1,22 +1,19 @@
-## Checkpoint — 2026-07-10 — Phase 10 Packaging, Deployment, and Cost Tracking
+## Checkpoint — 2026-07-11 — Test Batch 1
 
-**Branch:** phase-10-packaging
+**Branch:** test-batch-1
 **Status:** ready-for-approval
 
-**What was built this session:**
-- **Cost & Token Tracking**: Integrated role-based token counting and pricing calculation into `markly/state.py`, `markly/llm.py`, `markly/engine.py`, and `markly/cli.py` (`markly runs show` breakdown).
-- **Opt-in Telemetry**: Built `markly/telemetry.py` to send anonymous structural metrics asynchronously when enabled, and created `TELEMETRY.md` transparency document.
-- **Docker Bundling**: Created `Dockerfile` and updated `docker-compose.yml` to bundle `markly-cli`, `postgres`, and `chroma` services with healthchecks and persistent volumes.
-- **Install Scripts**: Created `install.sh` and `install.ps1` for one-command installation and automatic path configuration.
-- **Cleaned Win32 Prints**: Replaced all heavy unicode emojis in `markly/cli.py` with ASCII indicators (`[OK]`, `[ERROR]`, `[START]`) to prevent encoding failures on Windows consoles.
-- **Obsidian Vault Graph**: Compiled 12 hand-written Markdown files inside `graphify-out/obsidian/` detailing the exact architecture, logic, schemas, and API definitions of every module in the project.
+**What was built/fixed this session:**
+- **Unicode Error Patched:** Replaced heavy unicode emojis (✅, ❌, 📢) in `markly/cli.py`, `markly/engine.py`, `markly/eval/runner.py`, `markly/setup_wizard.py`, and `markly/tools/notify_tools.py` with ASCII equivalents (e.g. `[OK]`, `[FAIL]`, `[ALERT]`) to prevent `UnicodeEncodeError` crashes on Windows hosts.
+- **Approval Handler Fix:** Added a `cli_approval_handler` to `markly/cli.py` in the `run` command so that tools requiring approval (`shell.execute`) now prompt the user interactively instead of auto-failing with an environment error.
+- **Skill Author Fix:** Fixed a tuple unpacking error in `markly/memory/skill_author.py` by updating the `call_llm` return signature unpacking to expect 4 values instead of 3.
+- **Batch 1 Executed:** Ran 3 end-to-end tests (covering goals 1.1-1.5 for the core loop, approval pausing, caps limits, and critic correction) and successfully generated `test-reports/batch-1.md`.
 
-**What is NOT yet done in this phase:**
-- Nothing — all requirements and verification steps are completed.
+**What is NOT yet done:**
+- Test Batches 2–24 remain to be executed.
 
 **Known issues / open questions:**
-- None.
+- Docker Desktop is not running, so `github-mcp-server` integration is currently disabled (falling back to standard CLI tools).
 
 **Next session should start with:**
-- Awaiting Pruthvi's approval of the Phase 10 Test Report and the Obsidian Knowledge Graph.
-- Merge `phase-10-packaging` branch into `develop` and tag `v0.1.0-alpha`.
+- Pruthvi reviewing and approving the `test-reports/batch-1.md` report. Once approved, merge `test-batch-1` into `develop` and provide instructions/prompt for Test Batch 2.
